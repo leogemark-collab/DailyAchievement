@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { DEFAULT_CATEGORY } from '@/constants/win-categories';
 import type { Achievement, Win } from '@/types/win';
 
 type WinStats = {
@@ -7,21 +8,29 @@ type WinStats = {
   winsToday: number;
   winsThisWeek: number;
   mostProductiveDay: string;
+  bestDayLabel: string;
+  bestDayCount: number;
+  uniqueCategories: number;
   currentStreak: number;
   bestStreak: number;
+  weeklyCounts: WeeklyCount[];
+  streakHistory: StreakRecord[];
 };
 
 type WinsContextValue = {
   userName: string;
   setUserName: (name: string) => void;
+  dailyGoal: number;
+  setDailyGoal: (goal: number) => void;
   wins: Win[];
-  addWin: (text: string, date?: Date) => void;
+  addWin: (text: string, category?: Win['category'], date?: Date) => void;
   editWin: (id: string, newText: string) => void;
   deleteWin: (id: string) => void;
   clearWins: () => void;
   stats: WinStats;
   todayLabel: string;
   achievements: Achievement[];
+  winsByDay: Record<string, Win[]>;
 };
 
 const WinsContext = React.createContext<WinsContextValue | null>(null);
@@ -33,9 +42,33 @@ const formatDate = (date: Date) =>
     year: 'numeric',
   });
 
+const formatShortDate = (date: Date) =>
+  date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+const padDay = (value: number) => value.toString().padStart(2, '0');
+
+const toDayKey = (date: Date) =>
+  `${date.getFullYear()}-${padDay(date.getMonth() + 1)}-${padDay(date.getDate())}`;
+
+const fromDayKey = (key: string) => {
+  const [year, month, day] = key.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+};
+
 const parseDate = (dateString: string) => {
   const parsed = new Date(dateString);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeGoal = (goal: number) => {
+  if (!Number.isFinite(goal)) return 1;
+  const rounded = Math.round(goal);
+  return Math.max(1, rounded);
 };
 
 const startOfRollingWeek = (now: Date) => {
@@ -92,15 +125,164 @@ const calculateStreaks = (wins: Win[]): { currentStreak: number; bestStreak: num
   return { currentStreak, bestStreak };
 };
 
+type WeeklyCount = {
+  label: string;
+  date: string;
+  count: number;
+};
+
+type StreakRecord = {
+  start: string;
+  end: string;
+  length: number;
+};
+
+const buildWeeklyCounts = (dailyCounts: Record<string, number>, now: Date) => {
+  const results: WeeklyCount[] = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - offset);
+    const key = toDayKey(day);
+    results.push({
+      label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+      date: formatShortDate(day),
+      count: dailyCounts[key] ?? 0,
+    });
+  }
+  return results;
+};
+
+const buildStreakHistory = (dayKeys: string[]) => {
+  if (dayKeys.length === 0) return [];
+  const sorted = [...dayKeys].sort(
+    (a, b) => fromDayKey(a).getTime() - fromDayKey(b).getTime()
+  );
+  const streaks: StreakRecord[] = [];
+  let streakStart = sorted[0];
+  let previous = sorted[0];
+  let length = 1;
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    const diff = fromDayKey(current).getTime() - fromDayKey(previous).getTime();
+    if (diff === 86400000) {
+      length += 1;
+      previous = current;
+    } else {
+      streaks.push({
+        start: formatDate(fromDayKey(streakStart)),
+        end: formatDate(fromDayKey(previous)),
+        length,
+      });
+      streakStart = current;
+      previous = current;
+      length = 1;
+    }
+  }
+
+  streaks.push({
+    start: formatDate(fromDayKey(streakStart)),
+    end: formatDate(fromDayKey(previous)),
+    length,
+  });
+
+  return streaks.sort((a, b) => {
+    const aTime = fromDayKey(a.end).getTime();
+    const bTime = fromDayKey(b.end).getTime();
+    return bTime - aTime;
+  });
+};
+
 const DEFAULT_ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-win', name: 'Getting Started', description: 'Record your first win', emoji: '🌟', condition: 'wins', threshold: 1 },
-  { id: 'ten-wins', name: 'Good Momentum', description: 'Record 10 wins', emoji: '🚀', condition: 'wins', threshold: 10 },
-  { id: 'fifty-wins', name: 'On a Roll', description: 'Record 50 wins', emoji: '📈', condition: 'wins', threshold: 50 },
-  { id: 'hundred-wins', name: 'Century Club', description: 'Record 100 wins', emoji: '💯', condition: 'wins', threshold: 100 },
-  { id: 'three-day-streak', name: 'Consistency', description: 'Maintain a 3-day streak', emoji: '🔥', condition: 'streak', threshold: 3 },
-  { id: 'seven-day-streak', name: 'On Fire', description: 'Maintain a 7-day streak', emoji: '🌡️', condition: 'streak', threshold: 7 },
-  { id: 'fourteen-day-streak', name: 'Unstoppable', description: 'Maintain a 14-day streak', emoji: '⚡', condition: 'streak', threshold: 14 },
-  { id: 'productive-week', name: 'Productive Week', description: 'Record 7+ wins in a week', emoji: '💪', condition: 'week', threshold: 7 },
+  {
+    id: 'first-win',
+    name: 'Getting Started',
+    description: 'Record your first win',
+    emoji: '\u{1F31F}',
+    condition: 'wins',
+    threshold: 1,
+  },
+  {
+    id: 'ten-wins',
+    name: 'Good Momentum',
+    description: 'Record 10 wins',
+    emoji: '\u{1F680}',
+    condition: 'wins',
+    threshold: 10,
+  },
+  {
+    id: 'fifty-wins',
+    name: 'On a Roll',
+    description: 'Record 50 wins',
+    emoji: '\u{1F4C8}',
+    condition: 'wins',
+    threshold: 50,
+  },
+  {
+    id: 'hundred-wins',
+    name: 'Century Club',
+    description: 'Record 100 wins',
+    emoji: '\u{1F4AF}',
+    condition: 'wins',
+    threshold: 100,
+  },
+  {
+    id: 'three-day-streak',
+    name: 'Consistency',
+    description: 'Maintain a 3-day streak',
+    emoji: '\u{1F525}',
+    condition: 'streak',
+    threshold: 3,
+  },
+  {
+    id: 'seven-day-streak',
+    name: 'On Fire',
+    description: 'Maintain a 7-day streak',
+    emoji: '\u{1F321}\u{FE0F}',
+    condition: 'streak',
+    threshold: 7,
+  },
+  {
+    id: 'fourteen-day-streak',
+    name: 'Unstoppable',
+    description: 'Maintain a 14-day streak',
+    emoji: '\u26A1',
+    condition: 'streak',
+    threshold: 14,
+  },
+  {
+    id: 'productive-week',
+    name: 'Productive Week',
+    description: 'Record 7+ wins in a week',
+    emoji: '\u{1F4AA}',
+    condition: 'week',
+    threshold: 7,
+  },
+  {
+    id: 'category-explorer',
+    name: 'Category Explorer',
+    description: 'Log wins in 3 different categories',
+    emoji: '\u{1F9ED}',
+    condition: 'categories',
+    threshold: 3,
+  },
+  {
+    id: 'power-day',
+    name: 'Power Day',
+    description: 'Log 5 wins in a single day',
+    emoji: '\u{1F4A5}',
+    condition: 'dailyWins',
+    threshold: 5,
+  },
+  {
+    id: 'best-day',
+    name: 'Best Day Ever',
+    description: 'Reach a personal best of 8 wins in a day',
+    emoji: '\u{1F3C6}',
+    condition: 'bestDay',
+    threshold: 8,
+  },
 ];
 
 const checkUnlockedAchievements = (
@@ -126,6 +308,13 @@ const checkUnlockedAchievements = (
       case 'week':
         shouldUnlock = stats.winsThisWeek >= achievement.threshold;
         break;
+      case 'categories':
+        shouldUnlock = stats.uniqueCategories >= achievement.threshold;
+        break;
+      case 'dailyWins':
+      case 'bestDay':
+        shouldUnlock = stats.bestDayCount >= achievement.threshold;
+        break;
     }
 
     return shouldUnlock ? { ...achievement, unlockedAt: now } : achievement;
@@ -137,6 +326,7 @@ const checkUnlockedAchievements = (
 
 export function WinsProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState('');
+  const [dailyGoal, setDailyGoalState] = useState(3);
   const [wins, setWins] = useState<Win[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>(DEFAULT_ACHIEVEMENTS);
   const [stats, setStats] = useState<WinStats>({
@@ -144,13 +334,22 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     winsToday: 0,
     winsThisWeek: 0,
     mostProductiveDay: 'N/A',
+    bestDayLabel: 'N/A',
+    bestDayCount: 0,
+    uniqueCategories: 0,
     currentStreak: 0,
     bestStreak: 0,
+    weeklyCounts: [],
+    streakHistory: [],
   });
 
   const todayLabel = formatDate(new Date());
 
-  const addWin = useCallback((text: string, date = new Date()) => {
+  const setDailyGoal = useCallback((goal: number) => {
+    setDailyGoalState(normalizeGoal(goal));
+  }, []);
+
+  const addWin = useCallback((text: string, category: Win['category'] = DEFAULT_CATEGORY, date = new Date()) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -159,6 +358,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
         id: `${Date.now()}-${prev.length}`,
         text: trimmed,
         date: formatDate(date),
+        category,
       },
       ...prev,
     ]);
@@ -179,10 +379,26 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
   const clearWins = useCallback(() => setWins([]), []);
 
+  const winsByDay = useMemo(() => {
+    const grouped: Record<string, Win[]> = {};
+    for (const win of wins) {
+      const parsed = parseDate(win.date);
+      if (!parsed) continue;
+      const key = toDayKey(parsed);
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(win);
+    }
+    return grouped;
+  }, [wins]);
+
   useEffect(() => {
     const now = new Date();
     const weekStart = startOfRollingWeek(now);
     const dayCounts: Record<string, number> = {};
+    const dateCounts: Record<string, number> = {};
+    const categoryCounts: Record<string, number> = {};
     let winsToday = 0;
     let winsThisWeek = 0;
 
@@ -196,6 +412,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
       const normalized = new Date(parsed);
       normalized.setHours(0, 0, 0, 0);
+      const dayKey = toDayKey(normalized);
 
       if (normalized >= weekStart && normalized <= now) {
         winsThisWeek += 1;
@@ -203,6 +420,8 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
       const weekday = normalized.toLocaleDateString('en-US', { weekday: 'long' });
       dayCounts[weekday] = (dayCounts[weekday] ?? 0) + 1;
+      dateCounts[dayKey] = (dateCounts[dayKey] ?? 0) + 1;
+      categoryCounts[win.category] = (categoryCounts[win.category] ?? 0) + 1;
     }
 
     const mostProductiveDay =
@@ -211,14 +430,29 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
         : 'N/A';
 
     const { currentStreak, bestStreak } = calculateStreaks(wins);
+    const weeklyCounts = buildWeeklyCounts(dateCounts, now);
+    const uniqueCategories = Object.keys(categoryCounts).length;
+    const streakHistory = buildStreakHistory(Object.keys(dateCounts));
+
+    const bestDayEntry = Object.entries(dateCounts).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return fromDayKey(b[0]).getTime() - fromDayKey(a[0]).getTime();
+    })[0];
+    const bestDayLabel = bestDayEntry ? formatDate(fromDayKey(bestDayEntry[0])) : 'N/A';
+    const bestDayCount = bestDayEntry ? bestDayEntry[1] : 0;
 
     const newStats = {
       totalWins: wins.length,
       winsToday,
       winsThisWeek,
       mostProductiveDay,
+      bestDayLabel,
+      bestDayCount,
+      uniqueCategories,
       currentStreak,
       bestStreak,
+      weeklyCounts,
+      streakHistory,
     };
 
     setStats(newStats);
@@ -232,6 +466,8 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     () => ({
       userName,
       setUserName,
+      dailyGoal,
+      setDailyGoal,
       wins,
       addWin,
       editWin,
@@ -240,8 +476,22 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
       stats,
       todayLabel,
       achievements,
+      winsByDay,
     }),
-    [userName, wins, addWin, editWin, deleteWin, clearWins, stats, todayLabel, achievements]
+    [
+      userName,
+      dailyGoal,
+      setDailyGoal,
+      wins,
+      addWin,
+      editWin,
+      deleteWin,
+      clearWins,
+      stats,
+      todayLabel,
+      achievements,
+      winsByDay,
+    ]
   );
 
   return <WinsContext.Provider value={value}>{children}</WinsContext.Provider>;

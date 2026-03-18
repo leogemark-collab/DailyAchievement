@@ -1,7 +1,10 @@
+import type { WinCategory } from '@/constants/win-categories';
+
 export type Win = {
   id: string;
   text: string;
   date: string;
+  category: WinCategory;
 };
 
 export type Achievement = {
@@ -9,7 +12,7 @@ export type Achievement = {
   name: string;
   description: string;
   emoji: string;
-  condition: 'wins' | 'streak' | 'week';
+  condition: 'wins' | 'streak' | 'week' | 'categories' | 'bestDay' | 'dailyWins';
   threshold: number;
   unlockedAt?: string;
 };

@@ -3,5 +3,6 @@ export type RootStackParamList = {
   login: undefined;
   dashboard: { name: string };
   wins: undefined;
+  calendar: undefined;
   profile: { name: string };
 };

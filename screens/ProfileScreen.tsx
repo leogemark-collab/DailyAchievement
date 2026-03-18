@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View, Pressable } from 'react-native';
 import { type RouteProp, useRoute } from '@react-navigation/native';
 
@@ -9,6 +9,7 @@ import { WinsTheme } from '@/constants/wins-theme';
 import { useWins } from '@/hooks/use-wins';
 import { useTheme } from '@/hooks/use-theme';
 import { getTheme } from '@/constants/theme-utils';
+import { useReminder } from '@/hooks/use-reminder';
 import type { RootStackParamList } from '@/types/navigation';
 
 const moonIcon = '\u{1F319}';
@@ -18,12 +19,18 @@ const starIcon = '\u{2B50}';
 
 export default function ProfileScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'profile'>>();
-  const { stats, userName, clearWins, achievements } = useWins();
+  const { stats, userName, clearWins, achievements, dailyGoal } = useWins();
   const { isDark, toggleTheme } = useTheme();
   const theme = getTheme(isDark);
+  const { enabled: reminderEnabled, loading: reminderLoading, toggleReminder, reminderTimeLabel } = useReminder();
   const name = (route.params?.name ?? userName) || 'Friend';
 
   const unlockedAchievements = achievements.filter((a) => a.unlockedAt);
+  const maxWeekly = useMemo(
+    () => Math.max(1, ...stats.weeklyCounts.map((item) => item.count)),
+    [stats.weeklyCounts]
+  );
+  const recentStreaks = stats.streakHistory.slice(0, 3);
 
   return (
     <ScreenContainer>
@@ -48,6 +55,11 @@ export default function ProfileScreen() {
         <View style={styles.statsGrid}>
           <StatCard label="Total Wins Recorded" value={stats.totalWins} />
           <StatCard label="Wins This Week" value={stats.winsThisWeek} />
+          <StatCard label="Today's Goal Progress" value={`${stats.winsToday}/${dailyGoal}`} />
+          <StatCard
+            label="Best Day"
+            value={stats.bestDayLabel === 'N/A' ? 'N/A' : `${stats.bestDayLabel} (${stats.bestDayCount})`}
+          />
           <StatCard label="Most Productive Day" value={stats.mostProductiveDay} />
         </View>
 
@@ -76,6 +88,66 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Weekly Momentum</Text>
+          <View
+            style={[
+              styles.chartCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              theme.shadows.card,
+            ]}
+          >
+            <View style={styles.chartRow}>
+              {stats.weeklyCounts.map((item) => {
+                const height = 16 + (item.count / maxWeekly) * 64;
+                return (
+                  <View key={item.date} style={styles.chartColumn}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        {
+                          height,
+                          backgroundColor: item.count > 0 ? theme.colors.accent : theme.colors.border,
+                        },
+                      ]}
+                    />
+                    <Text style={[styles.chartLabel, { color: theme.colors.textMuted }]}>{item.label}</Text>
+                    <Text style={[styles.chartValue, { color: theme.colors.text }]}>{item.count}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Streak History</Text>
+          <View
+            style={[
+              styles.streakHistoryCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              theme.shadows.card,
+            ]}
+          >
+            {recentStreaks.length === 0 ? (
+              <Text style={[styles.streakEmpty, { color: theme.colors.textMuted }]}>
+                Log wins on consecutive days to build your first streak.
+              </Text>
+            ) : (
+              recentStreaks.map((streak, index) => (
+                <View key={`${streak.start}-${index}`} style={styles.streakHistoryRow}>
+                  <Text style={[styles.streakHistoryValue, { color: theme.colors.text }]}>
+                    {streak.length} days
+                  </Text>
+                  <Text style={[styles.streakHistoryLabel, { color: theme.colors.textMuted }]}>
+                    {streak.start} - {streak.end}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
         <View style={styles.achievementsSection}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
             Achievements ({unlockedAchievements.length}/{achievements.length})
@@ -101,6 +173,38 @@ export default function ProfileScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        <View
+          style={[
+            styles.reminderCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <View style={styles.reminderHeader}>
+            <View>
+              <Text style={[styles.reminderTitle, { color: theme.colors.text }]}>Daily Reminder</Text>
+              <Text style={[styles.reminderSubtitle, { color: theme.colors.textMuted }]}>
+                {reminderTimeLabel}
+              </Text>
+            </View>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={(value) => {
+                if (!reminderLoading) {
+                  toggleReminder(value);
+                }
+              }}
+              disabled={reminderLoading}
+              trackColor={{ false: theme.colors.border, true: theme.colors.accentSoft }}
+              thumbColor={reminderEnabled ? theme.colors.accent : theme.colors.surface}
+              ios_backgroundColor={theme.colors.border}
+            />
+          </View>
+          <Text style={[styles.reminderText, { color: theme.colors.textMuted }]}>
+            Get a gentle nudge to log your daily win.
+          </Text>
         </View>
 
         <View
@@ -186,12 +290,71 @@ const styles = StyleSheet.create({
   achievementsSection: {
     marginTop: WinsTheme.spacing.xl,
   },
+  sectionBlock: {
+    marginTop: WinsTheme.spacing.xl,
+    gap: WinsTheme.spacing.md,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: WinsTheme.colors.text,
     fontFamily: WinsTheme.fonts.title,
     marginBottom: WinsTheme.spacing.md,
+  },
+  chartCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  chartColumn: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  chartBar: {
+    width: 18,
+    borderRadius: 999,
+  },
+  chartLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  chartValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  streakHistoryCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    gap: WinsTheme.spacing.sm,
+  },
+  streakHistoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: WinsTheme.spacing.sm,
+  },
+  streakHistoryValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
+  },
+  streakHistoryLabel: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  streakEmpty: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    textAlign: 'center',
   },
   achievementsGrid: {
     flexDirection: 'row',
@@ -218,6 +381,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: WinsTheme.fonts.body,
     lineHeight: 14,
+  },
+  reminderCard: {
+    marginTop: WinsTheme.spacing.xl,
+    padding: WinsTheme.spacing.lg,
+    borderRadius: WinsTheme.radius.lg,
+    borderWidth: 1,
+    gap: WinsTheme.spacing.sm,
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: WinsTheme.spacing.md,
+  },
+  reminderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
+  },
+  reminderSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  reminderText: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
   },
   resetCard: {
     marginTop: WinsTheme.spacing.xl,
