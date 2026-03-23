@@ -28,6 +28,7 @@ function RootLayoutContent() {
           <Stack.Screen name="dashboard" options={{ title: 'Dashboard' }} />
           <Stack.Screen name="wins" options={{ title: 'Wins List' }} />
           <Stack.Screen name="calendar" options={{ title: 'Calendar' }} />
+          <Stack.Screen name="ai" options={{ title: 'Journal' }} />
           <Stack.Screen name="profile" options={{ title: 'Profile' }} />
         </Stack>
         <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={theme.colors.background} />

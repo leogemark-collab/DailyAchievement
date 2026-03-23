@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useState } from 're
 
 import { DEFAULT_CATEGORY } from '@/constants/win-categories';
 import type { Achievement, Win } from '@/types/win';
+import { safeAsyncStorage } from '@/utils/safe-storage';
 
 type WinStats = {
   totalWins: number;
@@ -22,6 +23,8 @@ type WinsContextValue = {
   setUserName: (name: string) => void;
   dailyGoal: number;
   setDailyGoal: (goal: number) => void;
+  dailyIntention: string;
+  setDailyIntention: (intention: string) => void;
   wins: Win[];
   addWin: (text: string, category?: Win['category'], date?: Date) => void;
   editWin: (id: string, newText: string) => void;
@@ -71,6 +74,20 @@ const normalizeGoal = (goal: number) => {
   return Math.max(1, rounded);
 };
 
+const STORAGE_KEYS = {
+  wins: 'wins_v1',
+  userName: 'wins_user_name_v1',
+  dailyGoal: 'wins_daily_goal_v1',
+  dailyIntention: 'wins_daily_intention_v1',
+  achievements: 'wins_achievements_v1',
+};
+
+const mergeAchievements = (stored: Achievement[] | null) =>
+  DEFAULT_ACHIEVEMENTS.map((achievement) => {
+    const match = stored?.find((item) => item.id === achievement.id);
+    return match?.unlockedAt ? { ...achievement, unlockedAt: match.unlockedAt } : achievement;
+  });
+
 const startOfRollingWeek = (now: Date) => {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
@@ -83,7 +100,7 @@ const calculateStreaks = (wins: Win[]): { currentStreak: number; bestStreak: num
 
   const daysWithWins = new Set(
     wins.map((win) => {
-      const parsed = parseDate(win.date);
+      const parsed = win.dayKey ? fromDayKey(win.dayKey) : parseDate(win.date);
       if (!parsed) return null;
       const normalized = new Date(parsed);
       normalized.setHours(0, 0, 0, 0);
@@ -327,8 +344,10 @@ const checkUnlockedAchievements = (
 export function WinsProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState('');
   const [dailyGoal, setDailyGoalState] = useState(3);
+  const [dailyIntention, setDailyIntentionState] = useState('');
   const [wins, setWins] = useState<Win[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>(DEFAULT_ACHIEVEMENTS);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [stats, setStats] = useState<WinStats>({
     totalWins: 0,
     winsToday: 0,
@@ -345,19 +364,91 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
   const todayLabel = formatDate(new Date());
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadStoredData = async () => {
+      const stored = await safeAsyncStorage.multiGet([
+        STORAGE_KEYS.wins,
+        STORAGE_KEYS.userName,
+        STORAGE_KEYS.dailyGoal,
+        STORAGE_KEYS.dailyIntention,
+        STORAGE_KEYS.achievements,
+      ]);
+
+      const map = new Map(stored);
+      const storedWins = map.get(STORAGE_KEYS.wins);
+      const storedUserName = map.get(STORAGE_KEYS.userName);
+      const storedGoal = map.get(STORAGE_KEYS.dailyGoal);
+      const storedIntention = map.get(STORAGE_KEYS.dailyIntention);
+      const storedAchievements = map.get(STORAGE_KEYS.achievements);
+
+      if (!isMounted) return;
+
+      if (storedUserName) {
+        setUserName(storedUserName);
+      }
+
+      if (storedGoal) {
+        const parsedGoal = Number.parseInt(storedGoal, 10);
+        if (!Number.isNaN(parsedGoal)) {
+          setDailyGoalState(normalizeGoal(parsedGoal));
+        }
+      }
+
+      if (storedIntention) {
+        setDailyIntentionState(storedIntention);
+      }
+
+      if (storedWins) {
+        try {
+          const parsedWins = JSON.parse(storedWins) as Win[];
+          if (Array.isArray(parsedWins)) {
+            setWins(parsedWins);
+          }
+        } catch (error) {
+          console.warn('Failed to parse stored wins:', (error as Error).message);
+        }
+      }
+
+      if (storedAchievements) {
+        try {
+          const parsed = JSON.parse(storedAchievements) as Achievement[];
+          if (Array.isArray(parsed)) {
+            setAchievements(mergeAchievements(parsed));
+          }
+        } catch (error) {
+          console.warn('Failed to parse stored achievements:', (error as Error).message);
+        }
+      }
+
+      setIsHydrated(true);
+    };
+
+    void loadStoredData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const setDailyGoal = useCallback((goal: number) => {
     setDailyGoalState(normalizeGoal(goal));
+  }, []);
+
+  const setDailyIntention = useCallback((intention: string) => {
+    setDailyIntentionState(intention.trim());
   }, []);
 
   const addWin = useCallback((text: string, category: Win['category'] = DEFAULT_CATEGORY, date = new Date()) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    const dayKey = toDayKey(date);
 
     setWins((prev) => [
       {
         id: `${Date.now()}-${prev.length}`,
         text: trimmed,
         date: formatDate(date),
+        dayKey,
         category,
       },
       ...prev,
@@ -382,9 +473,9 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
   const winsByDay = useMemo(() => {
     const grouped: Record<string, Win[]> = {};
     for (const win of wins) {
-      const parsed = parseDate(win.date);
-      if (!parsed) continue;
-      const key = toDayKey(parsed);
+      const parsed = win.dayKey ? fromDayKey(win.dayKey) : parseDate(win.date);
+      const key = win.dayKey ?? (parsed ? toDayKey(parsed) : null);
+      if (!key) continue;
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -396,6 +487,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const now = new Date();
     const weekStart = startOfRollingWeek(now);
+    const todayKey = toDayKey(now);
     const dayCounts: Record<string, number> = {};
     const dateCounts: Record<string, number> = {};
     const categoryCounts: Record<string, number> = {};
@@ -403,16 +495,16 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     let winsThisWeek = 0;
 
     for (const win of wins) {
-      if (win.date === todayLabel) {
-        winsToday += 1;
-      }
-
-      const parsed = parseDate(win.date);
+      const parsed = win.dayKey ? fromDayKey(win.dayKey) : parseDate(win.date);
       if (!parsed) continue;
 
       const normalized = new Date(parsed);
       normalized.setHours(0, 0, 0, 0);
-      const dayKey = toDayKey(normalized);
+      const dayKey = win.dayKey ?? toDayKey(normalized);
+
+      if (dayKey === todayKey || win.date === todayLabel) {
+        winsToday += 1;
+      }
 
       if (normalized >= weekStart && normalized <= now) {
         winsThisWeek += 1;
@@ -462,12 +554,25 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     setAchievements(unlockedAchievements);
   }, [wins, todayLabel]);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+    void safeAsyncStorage.multiSet([
+      [STORAGE_KEYS.wins, JSON.stringify(wins)],
+      [STORAGE_KEYS.userName, userName],
+      [STORAGE_KEYS.dailyGoal, String(dailyGoal)],
+      [STORAGE_KEYS.dailyIntention, dailyIntention],
+      [STORAGE_KEYS.achievements, JSON.stringify(achievements)],
+    ]);
+  }, [wins, userName, dailyGoal, dailyIntention, achievements, isHydrated]);
+
   const value = useMemo(
     () => ({
       userName,
       setUserName,
       dailyGoal,
       setDailyGoal,
+      dailyIntention,
+      setDailyIntention,
       wins,
       addWin,
       editWin,
@@ -482,6 +587,8 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
       userName,
       dailyGoal,
       setDailyGoal,
+      dailyIntention,
+      setDailyIntention,
       wins,
       addWin,
       editWin,

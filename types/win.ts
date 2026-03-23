@@ -4,6 +4,7 @@ export type Win = {
   id: string;
   text: string;
   date: string;
+  dayKey?: string;
   category: WinCategory;
 };
 

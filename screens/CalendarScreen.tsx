@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { ScreenContainer } from '@/components/screen-container';
 import { getCategoryMeta } from '@/constants/win-categories';
@@ -7,6 +8,7 @@ import { WinsTheme } from '@/constants/wins-theme';
 import { getTheme } from '@/constants/theme-utils';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
+import { safeAsyncStorage } from '@/utils/safe-storage';
 
 const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -22,14 +24,87 @@ const formatLongDate = (date: Date) =>
     year: 'numeric',
   });
 
+type JournalEntry = {
+  id: string;
+  createdAt: string;
+  dateLabel: string;
+  mood?: string;
+  entry: string;
+};
+
+const JOURNAL_STORAGE_KEY = 'journal_entries_v1';
+const DAILY_MOOD_KEY = 'daily_mood_v1';
+
+type DailyMoodEntry = {
+  moodKey: string;
+  label: string;
+  emoji: string;
+  savedAt: string;
+};
+
+type DailyMoodMap = Record<string, DailyMoodEntry>;
+
 export default function CalendarScreen() {
   const { winsByDay } = useWins();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [displayDate, setDisplayDate] = useState(new Date());
   const [selectedDayKey, setSelectedDayKey] = useState(toDayKey(new Date()));
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [dailyMoods, setDailyMoods] = useState<DailyMoodMap>({});
+
+  const loadJournalEntries = useCallback(async () => {
+    const stored = await safeAsyncStorage.getItem(JOURNAL_STORAGE_KEY);
+    if (!stored) {
+      setJournalEntries([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as JournalEntry[];
+      setJournalEntries(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.warn('Failed to parse journal entries:', (error as Error).message);
+      setJournalEntries([]);
+    }
+  }, []);
+
+  const loadDailyMoods = useCallback(async () => {
+    const stored = await safeAsyncStorage.getItem(DAILY_MOOD_KEY);
+    if (!stored) {
+      setDailyMoods({});
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored) as DailyMoodMap;
+      setDailyMoods(parsed && typeof parsed === 'object' ? parsed : {});
+    } catch (error) {
+      console.warn('Failed to parse daily moods:', (error as Error).message);
+      setDailyMoods({});
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadJournalEntries();
+      void loadDailyMoods();
+    }, [loadJournalEntries, loadDailyMoods])
+  );
 
   const todayKey = toDayKey(new Date());
+
+  const journalByDay = useMemo(() => {
+    const grouped: Record<string, JournalEntry[]> = {};
+    for (const entry of journalEntries) {
+      const parsed = new Date(entry.createdAt);
+      if (Number.isNaN(parsed.getTime())) continue;
+      const key = toDayKey(parsed);
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(entry);
+    }
+    return grouped;
+  }, [journalEntries]);
 
   const { cells, monthLabel } = useMemo(() => {
     const year = displayDate.getFullYear();
@@ -50,19 +125,23 @@ export default function CalendarScreen() {
       }
       const date = new Date(year, month, dayNumber);
       const key = toDayKey(date);
-      const count = winsByDay[key]?.length ?? 0;
+      const winCount = winsByDay[key]?.length ?? 0;
+      const journalCount = journalByDay[key]?.length ?? 0;
+      const moodEntry = dailyMoods[key];
       return {
         key,
         empty: false,
         dayNumber,
         date,
-        count,
+        winCount,
+        journalCount,
+        moodEntry,
         isToday: key === todayKey,
       } as const;
     });
 
     return { cells: calendarCells, monthLabel: monthLabelText };
-  }, [displayDate, winsByDay, todayKey]);
+  }, [displayDate, winsByDay, journalByDay, dailyMoods, todayKey]);
 
   const selectedDate = useMemo(() => {
     const [year, month, day] = selectedDayKey.split('-').map(Number);
@@ -70,6 +149,19 @@ export default function CalendarScreen() {
   }, [selectedDayKey]);
 
   const selectedWins = winsByDay[selectedDayKey] ?? [];
+  const selectedJournals = journalByDay[selectedDayKey] ?? [];
+  const selectedMood = dailyMoods[selectedDayKey];
+  const subtitleParts = [];
+  if (selectedWins.length > 0) {
+    subtitleParts.push(`${selectedWins.length} win${selectedWins.length === 1 ? '' : 's'}`);
+  }
+  if (selectedJournals.length > 0) {
+    subtitleParts.push(
+      `${selectedJournals.length} journal entr${selectedJournals.length === 1 ? 'y' : 'ies'}`
+    );
+  }
+  const subtitleText =
+    subtitleParts.length > 0 ? subtitleParts.join(' - ') : 'No wins or journal entries yet';
 
   const handleMonthChange = (direction: 'prev' | 'next') => {
     setDisplayDate((current) => {
@@ -137,7 +229,7 @@ export default function CalendarScreen() {
                     {
                       backgroundColor: isSelected
                         ? theme.colors.accent
-                        : cell.count > 0
+                        : cell.winCount + cell.journalCount > 0
                           ? theme.colors.surfaceAlt
                           : 'transparent',
                       borderColor: cell.isToday ? theme.colors.accent : 'transparent',
@@ -152,23 +244,60 @@ export default function CalendarScreen() {
                   >
                     {cell.dayNumber}
                   </Text>
-                  {cell.count > 0 && (
-                    <View
+                  {cell.moodEntry ? (
+                    <Text
                       style={[
-                        styles.countPill,
-                        {
-                          backgroundColor: isSelected ? theme.colors.onAccent : theme.colors.accent,
-                        },
+                        styles.cellMood,
+                        { color: isSelected ? theme.colors.onAccent : theme.colors.text },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.countText,
-                          { color: isSelected ? theme.colors.accent : theme.colors.onAccent },
-                        ]}
-                      >
-                        {cell.count}
-                      </Text>
+                      {cell.moodEntry.emoji}
+                    </Text>
+                  ) : null}
+                  {cell.winCount + cell.journalCount > 0 && (
+                    <View style={styles.countRow}>
+                      {cell.winCount > 0 && (
+                        <View
+                          style={[
+                            styles.countPill,
+                            {
+                              backgroundColor: isSelected
+                                ? theme.colors.onAccent
+                                : theme.colors.accent,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.countText,
+                              { color: isSelected ? theme.colors.accent : theme.colors.onAccent },
+                            ]}
+                          >
+                            W {cell.winCount}
+                          </Text>
+                        </View>
+                      )}
+                      {cell.journalCount > 0 && (
+                        <View
+                          style={[
+                            styles.countPill,
+                            {
+                              backgroundColor: isSelected
+                                ? theme.colors.onAccent
+                                : theme.colors.highlight,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.countText,
+                              { color: isSelected ? theme.colors.accent : theme.colors.text },
+                            ]}
+                          >
+                            J {cell.journalCount}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   )}
                 </Pressable>
@@ -182,26 +311,88 @@ export default function CalendarScreen() {
             {formatLongDate(selectedDate)}
           </Text>
           <Text style={[styles.daySubtitle, { color: theme.colors.textMuted }]}>
-            {selectedWins.length > 0 ? `${selectedWins.length} wins logged` : 'No wins yet'}
+            {subtitleText}
           </Text>
-          <View style={styles.dayWins}>
-            {selectedWins.map((win) => {
-              const category = getCategoryMeta(win.category);
-              return (
-                <View
-                  key={win.id}
-                  style={[
-                    styles.winRow,
-                    { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Text style={[styles.winText, { color: theme.colors.text }]}>{win.text}</Text>
-                  <Text style={[styles.winMeta, { color: theme.colors.textMuted }]}>
-                    {category.emoji} {category.label}
-                  </Text>
-                </View>
-              );
-            })}
+          <View style={styles.daySection}>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Mood</Text>
+            {selectedMood ? (
+              <View
+                style={[
+                  styles.moodRow,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={styles.moodEmoji}>{selectedMood.emoji}</Text>
+                <Text style={[styles.moodText, { color: theme.colors.text }]}>
+                  {`I'm feeling ${selectedMood.label}`}
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+                No mood set for this day.
+              </Text>
+            )}
+          </View>
+          <View style={styles.daySection}>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Wins</Text>
+            <View style={styles.dayWins}>
+              {selectedWins.length === 0 ? (
+                <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+                  No wins logged.
+                </Text>
+              ) : (
+                selectedWins.map((win) => {
+                  const category = getCategoryMeta(win.category);
+                  return (
+                    <View
+                      key={win.id}
+                      style={[
+                        styles.winRow,
+                        { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                      ]}
+                    >
+                      <Text style={[styles.winText, { color: theme.colors.text }]}>{win.text}</Text>
+                      <Text style={[styles.winMeta, { color: theme.colors.textMuted }]}>
+                        {category.emoji} {category.label}
+                      </Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
+
+          <View style={styles.daySection}>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Journal</Text>
+            <View style={styles.dayWins}>
+              {selectedJournals.length === 0 ? (
+                <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
+                  No journal entries yet.
+                </Text>
+              ) : (
+                selectedJournals.map((entry) => (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.journalRow,
+                      { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    {entry.mood ? (
+                      <Text style={[styles.journalMood, { color: theme.colors.text }]}>
+                        {`Mood: ${entry.mood}`}
+                      </Text>
+                    ) : null}
+                    <Text
+                      style={[styles.journalText, { color: theme.colors.text }]}
+                      numberOfLines={3}
+                    >
+                      {entry.entry}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -284,14 +475,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: WinsTheme.fonts.body,
   },
+  cellMood: {
+    fontSize: 12,
+    marginTop: 2,
+  },
   countPill: {
     marginTop: 4,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
   },
+  countRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    gap: 4,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
   countText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     fontFamily: WinsTheme.fonts.body,
   },
@@ -314,6 +516,33 @@ const styles = StyleSheet.create({
     marginTop: WinsTheme.spacing.sm,
     gap: WinsTheme.spacing.sm,
   },
+  daySection: {
+    marginTop: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.xs,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  moodRow: {
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    padding: WinsTheme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: WinsTheme.spacing.sm,
+  },
+  moodEmoji: {
+    fontSize: 18,
+  },
+  moodText: {
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
   winRow: {
     borderWidth: 1,
     borderRadius: WinsTheme.radius.md,
@@ -326,6 +555,26 @@ const styles = StyleSheet.create({
     fontFamily: WinsTheme.fonts.body,
   },
   winMeta: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  journalRow: {
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    padding: WinsTheme.spacing.md,
+    gap: 6,
+  },
+  journalMood: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  journalText: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 18,
+  },
+  emptyText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
   },

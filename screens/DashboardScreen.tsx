@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { type RouteProp, useRoute } from '@react-navigation/native';
 
@@ -24,12 +24,14 @@ const starIcon = '\u{2B50}';
 export default function DashboardScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'dashboard'>>();
-  const { addWin, stats, userName, dailyGoal, setDailyGoal } = useWins();
+  const { addWin, stats, userName, dailyGoal, setDailyGoal, dailyIntention, setDailyIntention } = useWins();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [winText, setWinText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(DEFAULT_CATEGORY);
   const [goalInput, setGoalInput] = useState(String(dailyGoal));
+  const [intentionInput, setIntentionInput] = useState(dailyIntention);
+  const intentionSyncRef = useRef(false);
 
   const name = (route.params?.name ?? userName) || 'Friend';
   const greeting = greetingForHour(new Date().getHours());
@@ -37,6 +39,14 @@ export default function DashboardScreen() {
   useEffect(() => {
     setGoalInput(String(dailyGoal));
   }, [dailyGoal]);
+
+  useEffect(() => {
+    if (intentionSyncRef.current) {
+      intentionSyncRef.current = false;
+      return;
+    }
+    setIntentionInput(dailyIntention);
+  }, [dailyIntention]);
 
   const handleAddWin = () => {
     addWin(winText, selectedCategory);
@@ -62,6 +72,22 @@ export default function DashboardScreen() {
     setDailyGoal(normalized);
     setGoalInput(String(normalized));
   };
+
+  const handleClearIntention = () => {
+    setIntentionInput('');
+    intentionSyncRef.current = true;
+    setDailyIntention('');
+  };
+
+  useEffect(() => {
+    const trimmed = intentionInput.trim();
+    if (trimmed === dailyIntention) return;
+    const timeout = setTimeout(() => {
+      intentionSyncRef.current = true;
+      setDailyIntention(intentionInput);
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [intentionInput, dailyIntention, setDailyIntention]);
 
   const canAdd = winText.trim().length > 0;
   const remainingWins = Math.max(0, dailyGoal - stats.winsToday);
@@ -200,6 +226,43 @@ export default function DashboardScreen() {
           </Text>
         </View>
 
+        <View
+          style={[
+            styles.intentionCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Today's intention</Text>
+          <TextInput
+            placeholder="e.g. Take breaks and finish one task at a time"
+            value={intentionInput}
+            onChangeText={setIntentionInput}
+            style={[
+              styles.intentionInput,
+              {
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceAlt,
+              },
+            ]}
+            placeholderTextColor={theme.colors.textMuted}
+            selectionColor={theme.colors.accent}
+            multiline
+          />
+          <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
+            Auto-saves as you type.
+          </Text>
+          <View style={styles.intentionActions}>
+            <PrimaryButton
+              label="Clear"
+              variant="ghost"
+              onPress={handleClearIntention}
+              disabled={!intentionInput}
+            />
+          </View>
+        </View>
+
         <View style={styles.statsRow}>
           <View
             style={[
@@ -249,6 +312,7 @@ export default function DashboardScreen() {
         <View style={styles.actions}>
           <PrimaryButton label="View Wins List" variant="ghost" onPress={() => navigation.navigate('wins')} />
           <PrimaryButton label="Calendar" variant="ghost" onPress={() => navigation.navigate('calendar')} />
+          <PrimaryButton label="Journal" variant="ghost" onPress={() => navigation.navigate('ai')} />
           <PrimaryButton
             label="Profile"
             variant="ghost"
@@ -369,6 +433,33 @@ const styles = StyleSheet.create({
   },
   goalHelper: {
     fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  intentionCard: {
+    marginTop: WinsTheme.spacing.lg,
+    backgroundColor: WinsTheme.colors.surface,
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    borderColor: WinsTheme.colors.border,
+    gap: WinsTheme.spacing.sm,
+  },
+  intentionInput: {
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    paddingHorizontal: WinsTheme.spacing.md,
+    paddingVertical: 10,
+    minHeight: 80,
+    fontSize: 15,
+    fontFamily: WinsTheme.fonts.body,
+    textAlignVertical: 'top',
+    lineHeight: 20,
+  },
+  intentionActions: {
+    gap: WinsTheme.spacing.sm,
+  },
+  helperText: {
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
   },
   label: {

@@ -4,5 +4,6 @@ export type RootStackParamList = {
   dashboard: { name: string };
   wins: undefined;
   calendar: undefined;
+  ai: undefined;
   profile: { name: string };
 };
