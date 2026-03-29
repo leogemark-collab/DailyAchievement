@@ -4,12 +4,16 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
 import { WinsTheme } from '@/constants/wins-theme';
 import { getTheme } from '@/constants/theme-utils';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
+import { useWins } from '@/hooks/use-wins';
 import { useTypedNavigation } from '@/navigation/typed-navigation';
 
 export default function SplashScreen() {
   const navigation = useTypedNavigation();
   const { isDark } = useTheme();
+  const { isReady, session, user, isConfigured } = useAuth();
+  const { setUserName } = useWins();
   const theme = getTheme(isDark);
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -21,15 +25,30 @@ export default function SplashScreen() {
     });
     animation.start();
 
+    return () => {
+      animation.stop();
+    };
+  }, [fade]);
+
+  useEffect(() => {
+    if (!isReady) return;
+
     const timer = setTimeout(() => {
+      if (isConfigured && session?.user) {
+        const username =
+          typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
+            ? user.user_metadata.username.trim()
+            : (user?.email?.split('@')[0] ?? 'Friend');
+        setUserName(username);
+        navigation.navigate('dashboard', { name: username });
+        return;
+      }
+
       navigation.navigate('login');
     }, 1600);
 
-    return () => {
-      animation.stop();
-      clearTimeout(timer);
-    };
-  }, [fade, navigation]);
+    return () => clearTimeout(timer);
+  }, [isConfigured, isReady, navigation, session, setUserName, user]);
 
   return (
     <ScreenContainer>

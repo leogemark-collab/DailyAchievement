@@ -25,6 +25,8 @@ const getNotifications = async (): Promise<NotificationsModule | null> => {
     notificationsModule.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: false,
         shouldSetBadge: false,
       }),
@@ -57,9 +59,9 @@ const scheduleReminder = async (Notifications: NotificationsModule) => {
       body: 'Take 30 seconds to celebrate your progress today.',
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: REMINDER_HOUR,
       minute: REMINDER_MINUTE,
-      repeats: true,
       channelId: Platform.OS === 'android' ? 'daily-reminders' : undefined,
     },
   });

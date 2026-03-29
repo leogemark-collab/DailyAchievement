@@ -6,9 +6,19 @@ import { ScreenContainer } from '@/components/screen-container';
 import { getCategoryMeta } from '@/constants/win-categories';
 import { WinsTheme } from '@/constants/wins-theme';
 import { getTheme } from '@/constants/theme-utils';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
-import { safeAsyncStorage } from '@/utils/safe-storage';
+import type { DailyMoodMap, JournalEntry } from '@/types/journal';
+import {
+  journalBundleHasMeaningfulData,
+  loadLegacyStoredUserName,
+  loadLocalJournalBundle,
+  loadRemoteJournalBundle,
+  replaceRemoteDailyMoods,
+  replaceRemoteJournalEntries,
+  saveLocalJournalBundle,
+} from '@/utils/user-data';
 
 const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -24,70 +34,78 @@ const formatLongDate = (date: Date) =>
     year: 'numeric',
   });
 
-type JournalEntry = {
-  id: string;
-  createdAt: string;
-  dateLabel: string;
-  mood?: string;
-  entry: string;
-};
-
-const JOURNAL_STORAGE_KEY = 'journal_entries_v1';
-const DAILY_MOOD_KEY = 'daily_mood_v1';
-
-type DailyMoodEntry = {
-  moodKey: string;
-  label: string;
-  emoji: string;
-  savedAt: string;
-};
-
-type DailyMoodMap = Record<string, DailyMoodEntry>;
-
 export default function CalendarScreen() {
-  const { winsByDay } = useWins();
+  const { winsByDay, userName } = useWins();
+  const { user, isConfigured } = useAuth();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [displayDate, setDisplayDate] = useState(new Date());
   const [selectedDayKey, setSelectedDayKey] = useState(toDayKey(new Date()));
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [dailyMoods, setDailyMoods] = useState<DailyMoodMap>({});
+  const authUserName =
+    typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
+      ? user.user_metadata.username.trim()
+      : (user?.email?.split('@')[0] ?? '');
+  const activeUserId = isConfigured ? user?.id ?? null : null;
 
-  const loadJournalEntries = useCallback(async () => {
-    const stored = await safeAsyncStorage.getItem(JOURNAL_STORAGE_KEY);
-    if (!stored) {
-      setJournalEntries([]);
+  const loadJournalData = useCallback(async () => {
+    if (!activeUserId) {
+      const localBundle = await loadLocalJournalBundle();
+      setJournalEntries(localBundle.entries);
+      setDailyMoods(localBundle.dailyMoods);
       return;
     }
-    try {
-      const parsed = JSON.parse(stored) as JournalEntry[];
-      setJournalEntries(Array.isArray(parsed) ? parsed : []);
-    } catch (error) {
-      console.warn('Failed to parse journal entries:', (error as Error).message);
-      setJournalEntries([]);
-    }
-  }, []);
 
-  const loadDailyMoods = useCallback(async () => {
-    const stored = await safeAsyncStorage.getItem(DAILY_MOOD_KEY);
-    if (!stored) {
-      setDailyMoods({});
-      return;
-    }
+    const scopedLocalBundle = await loadLocalJournalBundle(activeUserId);
+
     try {
-      const parsed = JSON.parse(stored) as DailyMoodMap;
-      setDailyMoods(parsed && typeof parsed === 'object' ? parsed : {});
+      const remoteBundle = await loadRemoteJournalBundle(activeUserId);
+      let nextBundle = remoteBundle;
+
+      if (!journalBundleHasMeaningfulData(remoteBundle)) {
+        const legacyStoredUserName = await loadLegacyStoredUserName();
+        const legacyBundle = await loadLocalJournalBundle();
+        const matchName = (userName || authUserName).trim().toLowerCase();
+        const sameLegacyUser = legacyStoredUserName.trim().toLowerCase() === matchName;
+        const migrationSource = journalBundleHasMeaningfulData(scopedLocalBundle)
+          ? scopedLocalBundle
+          : sameLegacyUser && journalBundleHasMeaningfulData(legacyBundle)
+            ? legacyBundle
+            : { entries: [], dailyMoods: {} };
+
+        nextBundle = migrationSource;
+
+        if (journalBundleHasMeaningfulData(migrationSource)) {
+          await replaceRemoteJournalEntries(activeUserId, migrationSource.entries);
+          await replaceRemoteDailyMoods(activeUserId, migrationSource.dailyMoods);
+        }
+      }
+
+      await saveLocalJournalBundle(nextBundle, activeUserId);
+      setJournalEntries(nextBundle.entries);
+      setDailyMoods(nextBundle.dailyMoods);
     } catch (error) {
-      console.warn('Failed to parse daily moods:', (error as Error).message);
-      setDailyMoods({});
+      console.warn('Failed to load calendar journal data:', (error as Error).message);
+
+      const legacyStoredUserName = await loadLegacyStoredUserName();
+      const legacyBundle = await loadLocalJournalBundle();
+      const matchName = (userName || authUserName).trim().toLowerCase();
+      const sameLegacyUser = legacyStoredUserName.trim().toLowerCase() === matchName;
+      const fallbackBundle =
+        journalBundleHasMeaningfulData(scopedLocalBundle) || !sameLegacyUser
+          ? scopedLocalBundle
+          : legacyBundle;
+
+      setJournalEntries(fallbackBundle.entries);
+      setDailyMoods(fallbackBundle.dailyMoods);
     }
-  }, []);
+  }, [activeUserId, authUserName, userName]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadJournalEntries();
-      void loadDailyMoods();
-    }, [loadJournalEntries, loadDailyMoods])
+      void loadJournalData();
+    }, [loadJournalData])
   );
 
   const todayKey = toDayKey(new Date());

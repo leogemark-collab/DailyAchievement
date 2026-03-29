@@ -6,6 +6,7 @@ export type Win = {
   date: string;
   dayKey?: string;
   category: WinCategory;
+  createdAt?: string;
 };
 
 export type Achievement = {

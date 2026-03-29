@@ -1,8 +1,19 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DEFAULT_CATEGORY } from '@/constants/win-categories';
+import { useAuth } from '@/hooks/use-auth';
 import type { Achievement, Win } from '@/types/win';
-import { safeAsyncStorage } from '@/utils/safe-storage';
+import {
+  DEFAULT_DAILY_GOAL,
+  loadLocalWinsBundle,
+  loadRemoteWinsBundle,
+  replaceRemoteWins,
+  saveLocalWinsBundle,
+  saveRemoteSettings,
+  type UserSettingsBundle,
+  type WinsBundle,
+  userBundleHasMeaningfulData,
+} from '@/utils/user-data';
 
 type WinStats = {
   totalWins: number;
@@ -69,18 +80,17 @@ const parseDate = (dateString: string) => {
 };
 
 const normalizeGoal = (goal: number) => {
-  if (!Number.isFinite(goal)) return 1;
+  if (!Number.isFinite(goal)) return DEFAULT_DAILY_GOAL;
   const rounded = Math.round(goal);
   return Math.max(1, rounded);
 };
 
-const STORAGE_KEYS = {
-  wins: 'wins_v1',
-  userName: 'wins_user_name_v1',
-  dailyGoal: 'wins_daily_goal_v1',
-  dailyIntention: 'wins_daily_intention_v1',
-  achievements: 'wins_achievements_v1',
-};
+const sortWins = (wins: Win[]) =>
+  [...wins].sort((left, right) => {
+    const leftTime = new Date(left.createdAt ?? 0).getTime();
+    const rightTime = new Date(right.createdAt ?? 0).getTime();
+    return rightTime - leftTime;
+  });
 
 const mergeAchievements = (stored: Achievement[] | null) =>
   DEFAULT_ACHIEVEMENTS.map((achievement) => {
@@ -99,13 +109,15 @@ const calculateStreaks = (wins: Win[]): { currentStreak: number; bestStreak: num
   if (wins.length === 0) return { currentStreak: 0, bestStreak: 0 };
 
   const daysWithWins = new Set(
-    wins.map((win) => {
-      const parsed = win.dayKey ? fromDayKey(win.dayKey) : parseDate(win.date);
-      if (!parsed) return null;
-      const normalized = new Date(parsed);
-      normalized.setHours(0, 0, 0, 0);
-      return normalized.getTime();
-    }).filter((time): time is number => time !== null)
+    wins
+      .map((win) => {
+        const parsed = win.dayKey ? fromDayKey(win.dayKey) : parseDate(win.date);
+        if (!parsed) return null;
+        const normalized = new Date(parsed);
+        normalized.setHours(0, 0, 0, 0);
+        return normalized.getTime();
+      })
+      .filter((time): time is number => time !== null)
   );
 
   if (daysWithWins.size === 0) return { currentStreak: 0, bestStreak: 0 };
@@ -119,18 +131,15 @@ const calculateStreaks = (wins: Win[]): { currentStreak: number; bestStreak: num
   let bestStreak = 0;
   let tempStreak = 0;
 
-  for (let i = 0; i < sortedDays.length; i++) {
-    const currentDay = sortedDays[i];
-    const nextDay = sortedDays[i + 1];
+  for (let index = 0; index < sortedDays.length; index += 1) {
+    const currentDay = sortedDays[index];
+    const nextDay = sortedDays[index + 1];
 
     tempStreak += 1;
 
-    // Check if this is a streak (consecutive days)
     if (!nextDay || currentDay - nextDay !== 86400000) {
-      // 24 hours in milliseconds
       bestStreak = Math.max(bestStreak, tempStreak);
 
-      // Current streak is only valid if it includes today or yesterday
       if (currentStreak === 0 && (currentDay === nowTime || currentDay === nowTime - 86400000)) {
         currentStreak = tempStreak;
       }
@@ -205,8 +214,8 @@ const buildStreakHistory = (dayKeys: string[]) => {
   });
 
   return streaks.sort((a, b) => {
-    const aTime = fromDayKey(a.end).getTime();
-    const bTime = fromDayKey(b.end).getTime();
+    const aTime = new Date(a.end).getTime();
+    const bTime = new Date(b.end).getTime();
     return bTime - aTime;
   });
 };
@@ -307,11 +316,10 @@ const checkUnlockedAchievements = (
   previousAchievements: Achievement[]
 ): Achievement[] => {
   const now = new Date().toISOString();
-  const unlocked = DEFAULT_ACHIEVEMENTS.map((achievement) => {
-    const isUnlocked = previousAchievements.some((a) => a.id === achievement.id && a.unlockedAt);
-    
-    if (isUnlocked) {
-      return previousAchievements.find((a) => a.id === achievement.id)!;
+  return DEFAULT_ACHIEVEMENTS.map((achievement) => {
+    const existing = previousAchievements.find((item) => item.id === achievement.id);
+    if (existing?.unlockedAt) {
+      return existing;
     }
 
     let shouldUnlock = false;
@@ -336,99 +344,137 @@ const checkUnlockedAchievements = (
 
     return shouldUnlock ? { ...achievement, unlockedAt: now } : achievement;
   });
-
-  return unlocked;
 };
 
+const getAuthUserName = (metadataUsername: unknown, email?: string | null) => {
+  if (typeof metadataUsername === 'string' && metadataUsername.trim()) {
+    return metadataUsername.trim();
+  }
+  return email?.split('@')[0]?.trim() ?? '';
+};
 
 export function WinsProvider({ children }: { children: React.ReactNode }) {
+  const { user, isConfigured } = useAuth();
   const [userName, setUserName] = useState('');
-  const [dailyGoal, setDailyGoalState] = useState(3);
+  const [dailyGoal, setDailyGoalState] = useState(DEFAULT_DAILY_GOAL);
   const [dailyIntention, setDailyIntentionState] = useState('');
   const [wins, setWins] = useState<Win[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>(DEFAULT_ACHIEVEMENTS);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [stats, setStats] = useState<WinStats>({
-    totalWins: 0,
-    winsToday: 0,
-    winsThisWeek: 0,
-    mostProductiveDay: 'N/A',
-    bestDayLabel: 'N/A',
-    bestDayCount: 0,
-    uniqueCategories: 0,
-    currentStreak: 0,
-    bestStreak: 0,
-    weeklyCounts: [],
-    streakHistory: [],
-  });
+  const [hydratedScope, setHydratedScope] = useState('');
+  const settingsSyncRef = useRef(Promise.resolve());
+  const winsSyncRef = useRef(Promise.resolve());
 
+  const activeUserId = isConfigured ? user?.id ?? null : null;
+  const authUserName = getAuthUserName(user?.user_metadata?.username, user?.email);
   const todayLabel = formatDate(new Date());
+
+  const applyBundle = useCallback(
+    (bundle: WinsBundle) => {
+      setUserName(bundle.userName);
+      setDailyGoalState(normalizeGoal(bundle.dailyGoal));
+      setDailyIntentionState(bundle.dailyIntention);
+      setWins(sortWins(bundle.wins));
+      setAchievements(mergeAchievements(bundle.achievements));
+    },
+    []
+  );
 
   useEffect(() => {
     let isMounted = true;
-    const loadStoredData = async () => {
-      const stored = await safeAsyncStorage.multiGet([
-        STORAGE_KEYS.wins,
-        STORAGE_KEYS.userName,
-        STORAGE_KEYS.dailyGoal,
-        STORAGE_KEYS.dailyIntention,
-        STORAGE_KEYS.achievements,
-      ]);
 
-      const map = new Map(stored);
-      const storedWins = map.get(STORAGE_KEYS.wins);
-      const storedUserName = map.get(STORAGE_KEYS.userName);
-      const storedGoal = map.get(STORAGE_KEYS.dailyGoal);
-      const storedIntention = map.get(STORAGE_KEYS.dailyIntention);
-      const storedAchievements = map.get(STORAGE_KEYS.achievements);
+    const hydrate = async () => {
+      const targetScope = activeUserId ?? '__local__';
+      setIsHydrated(false);
+      setHydratedScope('');
 
-      if (!isMounted) return;
-
-      if (storedUserName) {
-        setUserName(storedUserName);
+      if (!activeUserId) {
+        const localBundle = await loadLocalWinsBundle();
+        if (!isMounted) return;
+        applyBundle({
+          ...localBundle,
+          userName: localBundle.userName,
+        });
+        setHydratedScope(targetScope);
+        setIsHydrated(true);
+        return;
       }
 
-      if (storedGoal) {
-        const parsedGoal = Number.parseInt(storedGoal, 10);
-        if (!Number.isNaN(parsedGoal)) {
-          setDailyGoalState(normalizeGoal(parsedGoal));
-        }
-      }
+      const scopedLocalBundle = await loadLocalWinsBundle(activeUserId);
 
-      if (storedIntention) {
-        setDailyIntentionState(storedIntention);
-      }
+      try {
+        const remoteBundle = await loadRemoteWinsBundle(activeUserId);
+        const remoteSnapshot: WinsBundle = {
+          userName: remoteBundle.userName ?? '',
+          dailyGoal: normalizeGoal(remoteBundle.dailyGoal ?? DEFAULT_DAILY_GOAL),
+          dailyIntention: remoteBundle.dailyIntention ?? '',
+          achievements: remoteBundle.achievements ?? [],
+          wins: remoteBundle.wins ?? [],
+        };
 
-      if (storedWins) {
-        try {
-          const parsedWins = JSON.parse(storedWins) as Win[];
-          if (Array.isArray(parsedWins)) {
-            setWins(parsedWins);
+        let nextBundle: WinsBundle = {
+          userName: authUserName || remoteSnapshot.userName || scopedLocalBundle.userName,
+          dailyGoal: remoteSnapshot.dailyGoal,
+          dailyIntention: remoteSnapshot.dailyIntention,
+          achievements: remoteSnapshot.achievements,
+          wins: remoteSnapshot.wins,
+        };
+
+        if (!userBundleHasMeaningfulData(remoteSnapshot)) {
+          const legacyBundle = await loadLocalWinsBundle();
+          const sameLegacyUser =
+            legacyBundle.userName.trim().toLowerCase() === authUserName.trim().toLowerCase();
+          const migrationSource = userBundleHasMeaningfulData(scopedLocalBundle)
+            ? { ...scopedLocalBundle, userName: authUserName || scopedLocalBundle.userName }
+            : sameLegacyUser && userBundleHasMeaningfulData(legacyBundle)
+              ? { ...legacyBundle, userName: authUserName || legacyBundle.userName }
+              : {
+                  userName: authUserName,
+                  dailyGoal: DEFAULT_DAILY_GOAL,
+                  dailyIntention: '',
+                  achievements: [],
+                  wins: [],
+                };
+
+          nextBundle = migrationSource;
+
+          if (userBundleHasMeaningfulData(migrationSource)) {
+            await saveRemoteSettings(activeUserId, migrationSource);
+            await replaceRemoteWins(activeUserId, migrationSource.wins);
           }
-        } catch (error) {
-          console.warn('Failed to parse stored wins:', (error as Error).message);
+        }
+
+        await saveLocalWinsBundle(nextBundle, activeUserId);
+
+        if (!isMounted) return;
+        applyBundle(nextBundle);
+      } catch (error) {
+        console.warn('Failed to load wins from Supabase:', (error as Error).message);
+
+        const legacyBundle = await loadLocalWinsBundle();
+        const sameLegacyUser =
+          legacyBundle.userName.trim().toLowerCase() === authUserName.trim().toLowerCase();
+        const fallbackBundle =
+          userBundleHasMeaningfulData(scopedLocalBundle) || !sameLegacyUser
+            ? { ...scopedLocalBundle, userName: authUserName || scopedLocalBundle.userName }
+            : { ...legacyBundle, userName: authUserName || legacyBundle.userName };
+
+        if (!isMounted) return;
+        applyBundle(fallbackBundle);
+      } finally {
+        if (isMounted) {
+          setHydratedScope(targetScope);
+          setIsHydrated(true);
         }
       }
-
-      if (storedAchievements) {
-        try {
-          const parsed = JSON.parse(storedAchievements) as Achievement[];
-          if (Array.isArray(parsed)) {
-            setAchievements(mergeAchievements(parsed));
-          }
-        } catch (error) {
-          console.warn('Failed to parse stored achievements:', (error as Error).message);
-        }
-      }
-
-      setIsHydrated(true);
     };
 
-    void loadStoredData();
+    void hydrate();
+
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [activeUserId, applyBundle, authUserName]);
 
   const setDailyGoal = useCallback((goal: number) => {
     setDailyGoalState(normalizeGoal(goal));
@@ -438,33 +484,40 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     setDailyIntentionState(intention.trim());
   }, []);
 
-  const addWin = useCallback((text: string, category: Win['category'] = DEFAULT_CATEGORY, date = new Date()) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const dayKey = toDayKey(date);
+  const addWin = useCallback(
+    (text: string, category: Win['category'] = DEFAULT_CATEGORY, date = new Date()) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      const createdAt = date.toISOString();
+      const dayKey = toDayKey(date);
 
-    setWins((prev) => [
-      {
-        id: `${Date.now()}-${prev.length}`,
-        text: trimmed,
-        date: formatDate(date),
-        dayKey,
-        category,
-      },
-      ...prev,
-    ]);
-  }, []);
+      setWins((previous) =>
+        sortWins([
+          {
+            id: `${date.getTime()}-${previous.length}`,
+            text: trimmed,
+            date: formatDate(date),
+            dayKey,
+            category,
+            createdAt,
+          },
+          ...previous,
+        ])
+      );
+    },
+    []
+  );
 
   const deleteWin = useCallback((id: string) => {
-    setWins((prev) => prev.filter((win) => win.id !== id));
+    setWins((previous) => previous.filter((win) => win.id !== id));
   }, []);
 
   const editWin = useCallback((id: string, newText: string) => {
     const trimmed = newText.trim();
     if (!trimmed) return;
 
-    setWins((prev) =>
-      prev.map((win) => (win.id === id ? { ...win, text: trimmed } : win))
+    setWins((previous) =>
+      previous.map((win) => (win.id === id ? { ...win, text: trimmed } : win))
     );
   }, []);
 
@@ -484,12 +537,12 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     return grouped;
   }, [wins]);
 
-  useEffect(() => {
+  const stats = useMemo<WinStats>(() => {
     const now = new Date();
     const weekStart = startOfRollingWeek(now);
     const todayKey = toDayKey(now);
-    const dayCounts: Record<string, number> = {};
-    const dateCounts: Record<string, number> = {};
+    const weekdayCounts: Record<string, number> = {};
+    const dailyCounts: Record<string, number> = {};
     const categoryCounts: Record<string, number> = {};
     let winsToday = 0;
     let winsThisWeek = 0;
@@ -511,59 +564,111 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
       }
 
       const weekday = normalized.toLocaleDateString('en-US', { weekday: 'long' });
-      dayCounts[weekday] = (dayCounts[weekday] ?? 0) + 1;
-      dateCounts[dayKey] = (dateCounts[dayKey] ?? 0) + 1;
+      weekdayCounts[weekday] = (weekdayCounts[weekday] ?? 0) + 1;
+      dailyCounts[dayKey] = (dailyCounts[dayKey] ?? 0) + 1;
       categoryCounts[win.category] = (categoryCounts[win.category] ?? 0) + 1;
     }
 
     const mostProductiveDay =
-      Object.keys(dayCounts).length > 0
-        ? Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0][0]
+      Object.keys(weekdayCounts).length > 0
+        ? Object.entries(weekdayCounts).sort((a, b) => b[1] - a[1])[0][0]
         : 'N/A';
 
     const { currentStreak, bestStreak } = calculateStreaks(wins);
-    const weeklyCounts = buildWeeklyCounts(dateCounts, now);
+    const weeklyCounts = buildWeeklyCounts(dailyCounts, now);
     const uniqueCategories = Object.keys(categoryCounts).length;
-    const streakHistory = buildStreakHistory(Object.keys(dateCounts));
+    const streakHistory = buildStreakHistory(Object.keys(dailyCounts));
 
-    const bestDayEntry = Object.entries(dateCounts).sort((a, b) => {
+    const bestDayEntry = Object.entries(dailyCounts).sort((a, b) => {
       if (b[1] !== a[1]) return b[1] - a[1];
       return fromDayKey(b[0]).getTime() - fromDayKey(a[0]).getTime();
     })[0];
-    const bestDayLabel = bestDayEntry ? formatDate(fromDayKey(bestDayEntry[0])) : 'N/A';
-    const bestDayCount = bestDayEntry ? bestDayEntry[1] : 0;
 
-    const newStats = {
+    return {
       totalWins: wins.length,
       winsToday,
       winsThisWeek,
       mostProductiveDay,
-      bestDayLabel,
-      bestDayCount,
+      bestDayLabel: bestDayEntry ? formatDate(fromDayKey(bestDayEntry[0])) : 'N/A',
+      bestDayCount: bestDayEntry ? bestDayEntry[1] : 0,
       uniqueCategories,
       currentStreak,
       bestStreak,
       weeklyCounts,
       streakHistory,
     };
-
-    setStats(newStats);
-
-    // Update achievements based on new stats
-    const unlockedAchievements = checkUnlockedAchievements(newStats, achievements);
-    setAchievements(unlockedAchievements);
-  }, [wins, todayLabel]);
+  }, [todayLabel, wins]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    void safeAsyncStorage.multiSet([
-      [STORAGE_KEYS.wins, JSON.stringify(wins)],
-      [STORAGE_KEYS.userName, userName],
-      [STORAGE_KEYS.dailyGoal, String(dailyGoal)],
-      [STORAGE_KEYS.dailyIntention, dailyIntention],
-      [STORAGE_KEYS.achievements, JSON.stringify(achievements)],
-    ]);
-  }, [wins, userName, dailyGoal, dailyIntention, achievements, isHydrated]);
+    const unlockedAchievements = checkUnlockedAchievements(stats, achievements);
+    if (JSON.stringify(unlockedAchievements) !== JSON.stringify(achievements)) {
+      setAchievements(unlockedAchievements);
+    }
+  }, [achievements, stats]);
+
+  useEffect(() => {
+    const currentScope = activeUserId ?? '__local__';
+    if (!isHydrated || hydratedScope !== currentScope) return;
+
+    const bundle: WinsBundle = {
+      userName: activeUserId ? authUserName || userName : userName,
+      dailyGoal,
+      dailyIntention,
+      achievements,
+      wins,
+    };
+
+    void saveLocalWinsBundle(bundle, activeUserId);
+  }, [
+    achievements,
+    activeUserId,
+    authUserName,
+    dailyGoal,
+    dailyIntention,
+    hydratedScope,
+    isHydrated,
+    userName,
+    wins,
+  ]);
+
+  useEffect(() => {
+    if (!isHydrated || hydratedScope !== activeUserId || !activeUserId) return;
+
+    const settings: UserSettingsBundle = {
+      userName: authUserName || userName,
+      dailyGoal,
+      dailyIntention,
+      achievements,
+    };
+
+    settingsSyncRef.current = settingsSyncRef.current
+      .catch(() => undefined)
+      .then(() => saveRemoteSettings(activeUserId, settings))
+      .catch((error) => {
+        console.warn('Failed to sync settings to Supabase:', (error as Error).message);
+      });
+  }, [
+    achievements,
+    activeUserId,
+    authUserName,
+    dailyGoal,
+    dailyIntention,
+    hydratedScope,
+    isHydrated,
+    userName,
+  ]);
+
+  useEffect(() => {
+    if (!isHydrated || hydratedScope !== activeUserId || !activeUserId) return;
+
+    const winsSnapshot = sortWins(wins);
+    winsSyncRef.current = winsSyncRef.current
+      .catch(() => undefined)
+      .then(() => replaceRemoteWins(activeUserId, winsSnapshot))
+      .catch((error) => {
+        console.warn('Failed to sync wins to Supabase:', (error as Error).message);
+      });
+  }, [activeUserId, hydratedScope, isHydrated, wins]);
 
   const value = useMemo(
     () => ({
@@ -584,19 +689,19 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
       winsByDay,
     }),
     [
-      userName,
-      dailyGoal,
-      setDailyGoal,
-      dailyIntention,
-      setDailyIntention,
-      wins,
+      achievements,
       addWin,
-      editWin,
-      deleteWin,
       clearWins,
+      dailyGoal,
+      dailyIntention,
+      deleteWin,
+      editWin,
+      setDailyGoal,
+      setDailyIntention,
       stats,
       todayLabel,
-      achievements,
+      userName,
+      wins,
       winsByDay,
     ]
   );

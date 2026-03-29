@@ -6,10 +6,12 @@ import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
 import { StatCard } from '@/components/stat-card';
 import { WinsTheme } from '@/constants/wins-theme';
+import { useAuth } from '@/hooks/use-auth';
 import { useWins } from '@/hooks/use-wins';
 import { useTheme } from '@/hooks/use-theme';
 import { getTheme } from '@/constants/theme-utils';
 import { useReminder } from '@/hooks/use-reminder';
+import { useTypedNavigation } from '@/navigation/typed-navigation';
 import type { RootStackParamList } from '@/types/navigation';
 
 const moonIcon = '\u{1F319}';
@@ -18,8 +20,10 @@ const flameIcon = '\u{1F525}';
 const starIcon = '\u{2B50}';
 
 export default function ProfileScreen() {
+  const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'profile'>>();
-  const { stats, userName, clearWins, achievements, dailyGoal } = useWins();
+  const { stats, userName, clearWins, achievements, dailyGoal, setUserName } = useWins();
+  const { signOut, isConfigured } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const theme = getTheme(isDark);
   const { enabled: reminderEnabled, loading: reminderLoading, toggleReminder, reminderTimeLabel } = useReminder();
@@ -31,6 +35,17 @@ export default function ProfileScreen() {
     [stats.weeklyCounts]
   );
   const recentStreaks = stats.streakHistory.slice(0, 3);
+
+  const handleSignOut = async () => {
+    if (!isConfigured) return;
+    try {
+      await signOut();
+      setUserName('');
+      navigation.navigate('login');
+    } catch (error) {
+      console.warn('Failed to sign out:', (error as Error).message);
+    }
+  };
 
   return (
     <ScreenContainer>
@@ -217,6 +232,9 @@ export default function ProfileScreen() {
           <Text style={[styles.resetTitle, { color: theme.colors.text }]}>Fresh Start</Text>
           <Text style={[styles.resetText, { color: theme.colors.textMuted }]}>Clear all wins and begin a new streak.</Text>
           <PrimaryButton label="Clear Wins" variant="ghost" onPress={clearWins} />
+          {isConfigured ? (
+            <PrimaryButton label="Sign Out" variant="ghost" onPress={handleSignOut} />
+          ) : null}
         </View>
       </ScrollView>
     </ScreenContainer>

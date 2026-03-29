@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,11 +16,21 @@ import * as Haptics from 'expo-haptics';
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
 import { WinsTheme } from '@/constants/wins-theme';
+import { useAuth } from '@/hooks/use-auth';
 import { getTheme } from '@/constants/theme-utils';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
+import type { DailyMoodMap, JournalAnalysis, JournalEntry } from '@/types/journal';
 import { generateGeminiText } from '@/utils/gemini';
-import { safeAsyncStorage } from '@/utils/safe-storage';
+import {
+  journalBundleHasMeaningfulData,
+  loadLegacyStoredUserName,
+  loadLocalJournalBundle,
+  loadRemoteJournalBundle,
+  replaceRemoteDailyMoods,
+  replaceRemoteJournalEntries,
+  saveLocalJournalBundle,
+} from '@/utils/user-data';
 
 type MoodOption = {
   key: string;
@@ -104,24 +114,6 @@ const MOOD_OPTIONS: MoodOption[] = [
   },
 ];
 
-type JournalAnalysis = {
-  feeling?: string;
-  feedback?: string;
-  goal?: string;
-  question?: string;
-  raw: string;
-  parsed: boolean;
-};
-
-type JournalEntry = {
-  id: string;
-  createdAt: string;
-  dateLabel: string;
-  mood?: string;
-  entry: string;
-  analysis?: JournalAnalysis;
-};
-
 type WeeklyInsight = {
   theme?: string;
   progress?: string;
@@ -129,18 +121,6 @@ type WeeklyInsight = {
   raw: string;
   parsed: boolean;
 };
-
-type DailyMoodEntry = {
-  moodKey: string;
-  label: string;
-  emoji: string;
-  savedAt: string;
-};
-
-type DailyMoodMap = Record<string, DailyMoodEntry>;
-
-const JOURNAL_STORAGE_KEY = 'journal_entries_v1';
-const DAILY_MOOD_KEY = 'daily_mood_v1';
 
 const padDay = (value: number) => value.toString().padStart(2, '0');
 const toDayKey = (date: Date) =>
@@ -157,6 +137,11 @@ const formatDateTime = (date: Date) =>
     hour: 'numeric',
     minute: '2-digit',
   });
+
+const sortEntries = (entries: JournalEntry[]) =>
+  [...entries].sort(
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+  );
 
 const getMoodTheme = (mood: MoodOption | undefined, isDark: boolean) => {
   if (!mood) {
@@ -238,7 +223,7 @@ const parseAnalysis = (text: string): JournalAnalysis => {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const labels = ['Feeling', 'Feedback', 'Goal', 'Question'] as const;
+  const labels = ['Feeling', 'Feedback', 'Question'] as const;
   const sections: Partial<Record<(typeof labels)[number], string[]>> = {};
   let currentLabel: (typeof labels)[number] | null = null;
 
@@ -268,14 +253,12 @@ const parseAnalysis = (text: string): JournalAnalysis => {
 
   const feeling = joinSection('Feeling');
   const feedback = joinSection('Feedback');
-  const goal = joinSection('Goal');
   const question = joinSection('Question');
-  const parsed = Boolean(feeling || feedback || goal || question);
+  const parsed = Boolean(feeling || feedback || question);
 
   return {
     feeling,
     feedback,
-    goal,
     question,
     raw: text.trim(),
     parsed,
@@ -309,6 +292,7 @@ const parseWeeklyInsight = (text: string): WeeklyInsight => {
 
 export default function AiCoachScreen() {
   const { userName, setDailyIntention, dailyIntention } = useWins();
+  const { user, isConfigured } = useAuth();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [selectedMoodKey, setSelectedMoodKey] = useState(MOOD_OPTIONS[2].key);
@@ -317,14 +301,24 @@ export default function AiCoachScreen() {
   const [analysis, setAnalysis] = useState<JournalAnalysis | null>(null);
   const [saveNotice, setSaveNotice] = useState('');
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [dailyMoods, setDailyMoods] = useState<DailyMoodMap>({});
   const [weeklyInsight, setWeeklyInsight] = useState<WeeklyInsight | null>(null);
   const [goalInput, setGoalInput] = useState(dailyIntention);
   const [insightError, setInsightError] = useState('');
   const [insightLoading, setInsightLoading] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [hydratedScope, setHydratedScope] = useState('');
+  const entriesSyncRef = useRef(Promise.resolve());
+  const moodsSyncRef = useRef(Promise.resolve());
 
-  const name = userName || 'Friend';
+  const authUserName =
+    typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
+      ? user.user_metadata.username.trim()
+      : (user?.email?.split('@')[0] ?? '');
+  const activeUserId = isConfigured ? user?.id ?? null : null;
+  const name = userName || authUserName || 'Friend';
   const todayKey = toDayKey(new Date());
   const todayLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -352,42 +346,123 @@ export default function AiCoachScreen() {
 
   useEffect(() => {
     let isMounted = true;
-    const loadEntries = async () => {
-      const stored = await safeAsyncStorage.getItem(JOURNAL_STORAGE_KEY);
-      if (!stored) return;
+    const applyBundle = (entries: JournalEntry[], moods: DailyMoodMap) => {
+      const nextEntries = sortEntries(entries).slice(0, 30);
+      setJournalEntries(nextEntries);
+      setDailyMoods(moods);
+      const todayMood = moods[todayKey];
+      setSelectedMoodKey(todayMood?.moodKey ?? MOOD_OPTIONS[2].key);
+      setMoodStatus(todayMood ? 'Mood saved for today.' : '');
+    };
+
+    const hydrate = async () => {
+      const targetScope = activeUserId ?? '__local__';
+      setIsHydrated(false);
+      setHydratedScope('');
+
+      if (!activeUserId) {
+        const localBundle = await loadLocalJournalBundle();
+        if (!isMounted) return;
+        applyBundle(localBundle.entries, localBundle.dailyMoods);
+        setHydratedScope(targetScope);
+        setIsHydrated(true);
+        return;
+      }
+
+      const scopedLocalBundle = await loadLocalJournalBundle(activeUserId);
+
       try {
-        const parsed = JSON.parse(stored) as JournalEntry[];
-        if (Array.isArray(parsed) && isMounted) {
-          setJournalEntries(parsed);
+        const remoteBundle = await loadRemoteJournalBundle(activeUserId);
+        let nextBundle = remoteBundle;
+
+        if (!journalBundleHasMeaningfulData(remoteBundle)) {
+          const legacyStoredUserName = await loadLegacyStoredUserName();
+          const legacyBundle = await loadLocalJournalBundle();
+          const sameLegacyUser =
+            legacyStoredUserName.trim().toLowerCase() === name.trim().toLowerCase();
+
+          const migrationSource = journalBundleHasMeaningfulData(scopedLocalBundle)
+            ? scopedLocalBundle
+            : sameLegacyUser && journalBundleHasMeaningfulData(legacyBundle)
+              ? legacyBundle
+              : { entries: [], dailyMoods: {} };
+
+          nextBundle = migrationSource;
+
+          if (journalBundleHasMeaningfulData(migrationSource)) {
+            await replaceRemoteJournalEntries(activeUserId, migrationSource.entries);
+            await replaceRemoteDailyMoods(activeUserId, migrationSource.dailyMoods);
+          }
         }
+
+        await saveLocalJournalBundle(nextBundle, activeUserId);
+
+        if (!isMounted) return;
+        applyBundle(nextBundle.entries, nextBundle.dailyMoods);
       } catch (loadError) {
-        console.warn('Failed to parse journal entries:', (loadError as Error).message);
+        console.warn('Failed to load journal from Supabase:', (loadError as Error).message);
+
+        const legacyStoredUserName = await loadLegacyStoredUserName();
+        const legacyBundle = await loadLocalJournalBundle();
+        const sameLegacyUser =
+          legacyStoredUserName.trim().toLowerCase() === name.trim().toLowerCase();
+        const fallbackBundle =
+          journalBundleHasMeaningfulData(scopedLocalBundle) || !sameLegacyUser
+            ? scopedLocalBundle
+            : legacyBundle;
+
+        if (!isMounted) return;
+        applyBundle(fallbackBundle.entries, fallbackBundle.dailyMoods);
+      } finally {
+        if (isMounted) {
+          setHydratedScope(targetScope);
+          setIsHydrated(true);
+        }
       }
     };
-    const loadMood = async () => {
-      const stored = await safeAsyncStorage.getItem(DAILY_MOOD_KEY);
-      if (!stored) return;
-      try {
-        const parsed = JSON.parse(stored) as DailyMoodMap;
-        const todayMood = parsed?.[todayKey];
-        if (todayMood && isMounted) {
-          setSelectedMoodKey(todayMood.moodKey);
-          setMoodStatus('Mood saved for today.');
-        }
-      } catch (loadError) {
-        console.warn('Failed to parse daily mood:', (loadError as Error).message);
-      }
-    };
-    void loadEntries();
-    void loadMood();
+
+    void hydrate();
+
     return () => {
       isMounted = false;
     };
-  }, [todayKey]);
+  }, [activeUserId, name, todayKey]);
 
-  const persistEntries = (entries: JournalEntry[]) => {
-    void safeAsyncStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(entries));
-  };
+  useEffect(() => {
+    const currentScope = activeUserId ?? '__local__';
+    if (!isHydrated || hydratedScope !== currentScope) return;
+    void saveLocalJournalBundle(
+      {
+        entries: journalEntries,
+        dailyMoods,
+      },
+      activeUserId
+    );
+  }, [activeUserId, dailyMoods, hydratedScope, isHydrated, journalEntries]);
+
+  useEffect(() => {
+    if (!isHydrated || hydratedScope !== activeUserId || !activeUserId) return;
+
+    const entriesSnapshot = sortEntries(journalEntries).slice(0, 30);
+    entriesSyncRef.current = entriesSyncRef.current
+      .catch(() => undefined)
+      .then(() => replaceRemoteJournalEntries(activeUserId, entriesSnapshot))
+      .catch((syncError) => {
+        console.warn('Failed to sync journal entries to Supabase:', (syncError as Error).message);
+      });
+  }, [activeUserId, hydratedScope, isHydrated, journalEntries]);
+
+  useEffect(() => {
+    if (!isHydrated || hydratedScope !== activeUserId || !activeUserId) return;
+
+    const moodsSnapshot = { ...dailyMoods };
+    moodsSyncRef.current = moodsSyncRef.current
+      .catch(() => undefined)
+      .then(() => replaceRemoteDailyMoods(activeUserId, moodsSnapshot))
+      .catch((syncError) => {
+        console.warn('Failed to sync moods to Supabase:', (syncError as Error).message);
+      });
+  }, [activeUserId, dailyMoods, hydratedScope, isHydrated]);
 
   const handleLoadEntry = (entry: JournalEntry) => {
     setJournalText(entry.entry);
@@ -395,28 +470,19 @@ export default function AiCoachScreen() {
     setSaveNotice('');
   };
 
-  const saveMood = async (mood: MoodOption) => {
-    const stored = await safeAsyncStorage.getItem(DAILY_MOOD_KEY);
-    let moodMap: DailyMoodMap = {};
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as DailyMoodMap;
-        moodMap = parsed && typeof parsed === 'object' ? parsed : {};
-      } catch (loadError) {
-        console.warn('Failed to parse daily mood:', (loadError as Error).message);
-      }
-    }
-
-    moodMap[todayKey] = {
-      moodKey: mood.key,
-      label: mood.label,
-      emoji: mood.emoji,
-      savedAt: new Date().toISOString(),
-    };
-
+  const saveMood = (mood: MoodOption) => {
+    const savedAt = new Date().toISOString();
+    setDailyMoods((previous) => ({
+      ...previous,
+      [todayKey]: {
+        moodKey: mood.key,
+        label: mood.label,
+        emoji: mood.emoji,
+        savedAt,
+      },
+    }));
     setMoodStatus('Mood saved for today.');
     triggerSuccessHaptic();
-    void safeAsyncStorage.setItem(DAILY_MOOD_KEY, JSON.stringify(moodMap));
   };
 
   const handleSelectMood = (key: string) => {
@@ -425,13 +491,13 @@ export default function AiCoachScreen() {
     triggerSelectionHaptic();
     const mood = MOOD_OPTIONS.find((option) => option.key === key);
     if (mood) {
-      void saveMood(mood);
+      saveMood(mood);
     }
   };
 
-  const handleSaveMood = async () => {
+  const handleSaveMood = () => {
     if (!selectedMood) return;
-    await saveMood(selectedMood);
+    saveMood(selectedMood);
   };
 
   const saveEntry = (entryText: string, entryAnalysis?: JournalAnalysis | null) => {
@@ -448,8 +514,7 @@ export default function AiCoachScreen() {
     };
 
     setJournalEntries((prev) => {
-      const next = [newEntry, ...prev].slice(0, 30);
-      persistEntries(next);
+      const next = sortEntries([newEntry, ...prev]).slice(0, 30);
       return next;
     });
   };
@@ -571,7 +636,7 @@ export default function AiCoachScreen() {
             </View>
             <Text style={[styles.title, { color: theme.colors.text }]}>Daily Journal</Text>
             <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              Write freely and receive a gentle, goal-focused reflection.
+              Write freely and receive a gentle, empathetic reflection.
             </Text>
           </View>
 
@@ -637,7 +702,7 @@ export default function AiCoachScreen() {
                 <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Journal entry</Text>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                Write freely. The AI will respond with empathy and a small goal.
+                Write freely. The AI will respond with empathy and reflection.
               </Text>
             </View>
             <TextInput
