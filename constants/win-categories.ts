@@ -1,7 +1,7 @@
 export const WIN_CATEGORIES = [
-  { key: 'study', label: 'Study', emoji: '\u{1F4DA}' },
-  { key: 'health', label: 'Health', emoji: '\u{1F4AA}' },
-  { key: 'social', label: 'Social', emoji: '\u{1F91D}' },
+  { key: 'study', label: 'Focus', emoji: '\u{1F4DA}' },
+  { key: 'health', label: 'Wellness', emoji: '\u{1F4AA}' },
+  { key: 'social', label: 'Connection', emoji: '\u{1F91D}' },
   { key: 'personal', label: 'Personal', emoji: '\u{2728}' },
 ] as const;
 

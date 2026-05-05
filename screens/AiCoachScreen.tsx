@@ -625,7 +625,7 @@ export default function AiCoachScreen() {
                   { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
                 ]}
               >
-                <Text style={[styles.heroBadgeText, { color: theme.colors.accent }]}>Journal</Text>
+                <Text style={[styles.heroBadgeText, { color: theme.colors.accent }]}>Reflect</Text>
               </View>
               <View style={styles.heroDate}>
                 <Ionicons name="calendar-outline" size={14} color={theme.colors.textMuted} />
@@ -634,9 +634,9 @@ export default function AiCoachScreen() {
                 </Text>
               </View>
             </View>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Daily Journal</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Dayflow Reflection</Text>
             <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              Write freely and receive a gentle, empathetic reflection.
+              Slow down, write honestly, and receive a gentle reflection in return.
             </Text>
           </View>
 
@@ -650,7 +650,7 @@ export default function AiCoachScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
               <Ionicons name="heart-outline" size={18} color={moodTheme.text} />
-              <Text style={[styles.cardTitle, { color: moodTheme.text }]}>Mood check-in</Text>
+                <Text style={[styles.cardTitle, { color: moodTheme.text }]}>Mood check-in</Text>
             </View>
             <Text style={[styles.cardSubtitle, { color: moodTheme.text }]}>
               Tap a dot to set the tone for your reflection.
@@ -699,10 +699,10 @@ export default function AiCoachScreen() {
             <View style={styles.cardHeader}>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="create-outline" size={18} color={theme.colors.accent} />
-                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Journal entry</Text>
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Reflection note</Text>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                Write freely. The AI will respond with empathy and reflection.
+                Write freely. Dayflow will respond with empathy and perspective.
               </Text>
             </View>
             <TextInput
@@ -711,7 +711,7 @@ export default function AiCoachScreen() {
                 setJournalText(value);
                 setSaveNotice('');
               }}
-              placeholder="Write freely here..."
+              placeholder="Write about your day, your pressure, or the one thing that mattered..."
               placeholderTextColor={theme.colors.textMuted}
               style={[
                 styles.journalInput,
@@ -726,7 +726,7 @@ export default function AiCoachScreen() {
               textAlignVertical="top"
             />
             <PrimaryButton
-              label={loading ? 'Analyzing...' : 'Analyze & Save'}
+              label={loading ? 'Reflecting...' : 'Reflect & Save'}
               onPress={handleGenerate}
               disabled={!canGenerate}
             />
@@ -748,7 +748,7 @@ export default function AiCoachScreen() {
               <View style={styles.loadingRow}>
                 <ActivityIndicator color={theme.colors.accent} />
                 <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-                  Reading your entry...
+                  Reading your reflection...
                 </Text>
               </View>
             ) : null}
@@ -767,10 +767,10 @@ export default function AiCoachScreen() {
             <View style={styles.cardHeader}>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="flag-outline" size={18} color={theme.colors.accent} />
-                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Today's goal</Text>
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Flow intention</Text>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                Set a simple goal for today. It auto-saves as you type.
+                Set one calm focus for the day. It auto-saves as you type.
               </Text>
             </View>
             <TextInput
@@ -817,11 +817,11 @@ export default function AiCoachScreen() {
                 <View style={styles.cardTitleRow}>
                   <Ionicons name="chatbubbles-outline" size={18} color={theme.colors.accent} />
                   <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-                    Your feedback
+                    Dayflow response
                   </Text>
                 </View>
                 <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                  A gentle summary based on your entry and mood.
+                  A gentle summary based on your reflection and mood.
                 </Text>
               </View>
               {analysis.parsed ? (
@@ -870,10 +870,10 @@ export default function AiCoachScreen() {
               <View style={styles.cardHeader}>
                 <View style={styles.cardTitleRow}>
                   <Ionicons name="time-outline" size={18} color={theme.colors.accent} />
-                  <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Recent entries</Text>
+                  <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Recent reflections</Text>
                 </View>
                 <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                  Tap an entry to load it back into the journal.
+                  Tap a reflection to load it back into the editor.
                 </Text>
               </View>
               <View style={styles.entryList}>
@@ -921,15 +921,15 @@ export default function AiCoachScreen() {
               <View style={styles.cardTitleRow}>
                 <Ionicons name="analytics-outline" size={18} color={theme.colors.accent} />
                 <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-                  Weekly insight
+                  Weekly pulse
                 </Text>
               </View>
               <Text style={[styles.cardSubtitle, { color: theme.colors.textMuted }]}>
-                Generate a short, empathetic summary from your recent journal entries.
+                Generate a short, empathetic summary from your recent reflections.
               </Text>
             </View>
             <PrimaryButton
-              label={insightLoading ? 'Generating...' : 'Generate Weekly Insight'}
+              label={insightLoading ? 'Generating...' : 'Summarize My Week'}
               onPress={handleGenerateInsight}
               disabled={!canGenerateInsight}
             />

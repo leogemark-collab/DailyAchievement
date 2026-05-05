@@ -4,11 +4,12 @@ import { type RouteProp, useRoute } from '@react-navigation/native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
+import { BRAND_DAILY_PROMPT, BRAND_NAME } from '@/constants/brand';
+import { getTheme } from '@/constants/theme-utils';
 import { DEFAULT_CATEGORY, WIN_CATEGORIES } from '@/constants/win-categories';
 import { WinsTheme } from '@/constants/wins-theme';
-import { useWins } from '@/hooks/use-wins';
 import { useTheme } from '@/hooks/use-theme';
-import { getTheme } from '@/constants/theme-utils';
+import { useWins } from '@/hooks/use-wins';
 import { useTypedNavigation } from '@/navigation/typed-navigation';
 import type { RootStackParamList } from '@/types/navigation';
 
@@ -24,7 +25,8 @@ const starIcon = '\u{2B50}';
 export default function DashboardScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'dashboard'>>();
-  const { addWin, stats, userName, dailyGoal, setDailyGoal, dailyIntention, setDailyIntention } = useWins();
+  const { addWin, stats, userName, dailyGoal, setDailyGoal, dailyIntention, setDailyIntention } =
+    useWins();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [winText, setWinText] = useState('');
@@ -92,28 +94,73 @@ export default function DashboardScreen() {
   const canAdd = winText.trim().length > 0;
   const remainingWins = Math.max(0, dailyGoal - stats.winsToday);
   const goalProgress = Math.min(1, stats.winsToday / Math.max(1, dailyGoal));
+  const percentComplete = Math.round(goalProgress * 100);
+  const quickStats = [
+    { label: 'Today', value: stats.winsToday.toString() },
+    { label: 'Current streak', value: `${stats.currentStreak}${flameIcon}` },
+    { label: 'Best streak', value: `${stats.bestStreak}${starIcon}` },
+  ];
 
   return (
     <ScreenContainer>
       <ScrollView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
+        <View
+          style={[
+            styles.heroCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <View style={styles.heroTopRow}>
+            <View
+              style={[
+                styles.heroBadge,
+                { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
+              ]}
+            >
+              <Text style={[styles.heroBadgeText, { color: theme.colors.accent }]}>{BRAND_NAME} today</Text>
+            </View>
+            <Text style={[styles.heroPercent, { color: theme.colors.accent }]}>{percentComplete}% done</Text>
+          </View>
+          <Text style={[styles.greeting, { color: theme.colors.text }]}>{`${greeting}, ${name}`}</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{BRAND_DAILY_PROMPT}</Text>
           <View
             style={[
-              styles.heroBadge,
-              { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
+              styles.progressTrack,
+              { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
             ]}
           >
-            <Text style={[styles.heroBadgeText, { color: theme.colors.accent }]}>Daily Focus</Text>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${goalProgress * 100}%`, backgroundColor: theme.colors.accent },
+              ]}
+            />
           </View>
-          <Text style={[styles.greeting, { color: theme.colors.text }]}>{`${greeting}, ${name}!`}</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-            What small win did you accomplish today?
+          <Text style={[styles.progressText, { color: theme.colors.textMuted }]}>
+            {remainingWins === 0
+              ? 'Daily goal reached. Let the momentum settle in.'
+              : `${remainingWins} more win${remainingWins === 1 ? '' : 's'} to reach your daily flow.`}
           </Text>
+          <View style={styles.heroStatsRow}>
+            {quickStats.map((item) => (
+              <View
+                key={item.label}
+                style={[
+                  styles.heroStatCard,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[styles.heroStatValue, { color: theme.colors.text }]}>{item.value}</Text>
+                <Text style={[styles.heroStatLabel, { color: theme.colors.textMuted }]}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View
@@ -123,14 +170,14 @@ export default function DashboardScreen() {
             theme.shadows.card,
           ]}
         >
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Add today's small win</Text>
+          <Text style={[styles.sectionEyebrow, { color: theme.colors.textMuted }]}>Capture a bright spot</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>What moved forward?</Text>
+          <Text style={[styles.sectionCopy, { color: theme.colors.textMuted }]}>
+            Log something specific, honest, and small. That is enough.
+          </Text>
           <View style={styles.categoryBlock}>
             <Text style={[styles.categoryLabel, { color: theme.colors.textMuted }]}>Category</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryChips}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryChips}>
               {WIN_CATEGORIES.map((category) => {
                 const isActive = category.key === selectedCategory;
                 return (
@@ -159,83 +206,86 @@ export default function DashboardScreen() {
             </ScrollView>
           </View>
           <TextInput
-            placeholder="Finished my programming assignment"
+            placeholder="Finished my final project section and submitted it on time"
             value={winText}
             onChangeText={setWinText}
-            style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt }]}
+            style={[
+              styles.input,
+              {
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceAlt,
+              },
+            ]}
             placeholderTextColor={theme.colors.textMuted}
             selectionColor={theme.colors.accent}
+            multiline
           />
-          <PrimaryButton label="Add Win" onPress={handleAddWin} disabled={!canAdd} />
+          <PrimaryButton label="Log This Win" onPress={handleAddWin} disabled={!canAdd} />
         </View>
 
-        <View
-          style={[
-            styles.goalCard,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-            theme.shadows.card,
-          ]}
-        >
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Daily goal</Text>
-          <View style={styles.goalRow}>
-            <View style={styles.goalInputGroup}>
-              <TextInput
-                placeholder="3"
-                value={goalInput}
-                onChangeText={handleGoalChange}
-                onBlur={handleGoalBlur}
-                keyboardType="number-pad"
-                style={[
-                  styles.goalInput,
-                  {
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceAlt,
-                  },
-                ]}
-                placeholderTextColor={theme.colors.textMuted}
-                selectionColor={theme.colors.accent}
-                maxLength={3}
-              />
-              <Text style={[styles.goalUnit, { color: theme.colors.textMuted }]}>wins</Text>
-            </View>
-            <View style={styles.goalCount}>
-              <Text style={[styles.goalCountValue, { color: theme.colors.text }]}>
-                {stats.winsToday}/{dailyGoal}
-              </Text>
-              <Text style={[styles.goalCountLabel, { color: theme.colors.textMuted }]}>today</Text>
-            </View>
-          </View>
+        <View style={styles.focusGrid}>
           <View
             style={[
-              styles.goalBar,
-              { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+              styles.focusCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              theme.shadows.soft,
             ]}
           >
-            <View
-              style={[
-                styles.goalBarFill,
-                { width: `${goalProgress * 100}%`, backgroundColor: theme.colors.accent },
-              ]}
-            />
+            <Text style={[styles.sectionEyebrow, { color: theme.colors.textMuted }]}>Daily target</Text>
+            <View style={styles.goalRow}>
+              <View style={styles.goalInputGroup}>
+                <TextInput
+                  placeholder="3"
+                  value={goalInput}
+                  onChangeText={handleGoalChange}
+                  onBlur={handleGoalBlur}
+                  keyboardType="number-pad"
+                  style={[
+                    styles.goalInput,
+                    {
+                      color: theme.colors.text,
+                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.surfaceAlt,
+                    },
+                  ]}
+                  placeholderTextColor={theme.colors.textMuted}
+                  selectionColor={theme.colors.accent}
+                  maxLength={3}
+                />
+                <Text style={[styles.goalUnit, { color: theme.colors.textMuted }]}>wins</Text>
+              </View>
+              <View style={styles.goalCount}>
+                <Text style={[styles.goalCountValue, { color: theme.colors.text }]}>{`${stats.winsToday}/${dailyGoal}`}</Text>
+                <Text style={[styles.goalCountLabel, { color: theme.colors.textMuted }]}>tracked</Text>
+              </View>
+            </View>
           </View>
-          <Text style={[styles.goalHelper, { color: theme.colors.textMuted }]}>
-            {remainingWins === 0
-              ? 'Goal reached — celebrate that win!'
-              : `${remainingWins} more win${remainingWins === 1 ? '' : 's'} to go today.`}
-          </Text>
+
+          <View
+            style={[
+              styles.focusCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              theme.shadows.soft,
+            ]}
+          >
+            <Text style={[styles.sectionEyebrow, { color: theme.colors.textMuted }]}>Momentum</Text>
+            <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{stats.totalWins}</Text>
+            <Text style={[styles.summaryCopy, { color: theme.colors.textMuted }]}>Total moments saved in Dayflow</Text>
+          </View>
         </View>
 
         <View
           style={[
-            styles.intentionCard,
+            styles.card,
             { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
             theme.shadows.card,
           ]}
         >
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Today's intention</Text>
+          <Text style={[styles.sectionEyebrow, { color: theme.colors.textMuted }]}>Set the tone</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Today&apos;s intention</Text>
           <TextInput
-            placeholder="e.g. Take breaks and finish one task at a time"
+            placeholder="e.g. Finish one task at a time and keep my energy steady"
             value={intentionInput}
             onChangeText={setIntentionInput}
             style={[
@@ -250,74 +300,32 @@ export default function DashboardScreen() {
             selectionColor={theme.colors.accent}
             multiline
           />
-          <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
-            Auto-saves as you type.
-          </Text>
-          <View style={styles.intentionActions}>
-            <PrimaryButton
-              label="Clear"
-              variant="ghost"
-              onPress={handleClearIntention}
-              disabled={!intentionInput}
-            />
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.soft,
-            ]}
-          >
-            <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.winsToday}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Today's wins</Text>
-          </View>
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.soft,
-            ]}
-          >
-            <Text style={[styles.statValue, { color: theme.colors.text }]}>{stats.totalWins}</Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Total wins</Text>
-          </View>
-        </View>
-
-        <View style={styles.streakRow}>
-          <View
-            style={[
-              styles.streakCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.soft,
-            ]}
-          >
-            <Text style={[styles.streakValue, { color: theme.colors.text }]}>{stats.currentStreak}{flameIcon}</Text>
-            <Text style={[styles.streakLabel, { color: theme.colors.textMuted }]}>Current Streak</Text>
-          </View>
-          <View
-            style={[
-              styles.streakCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.soft,
-            ]}
-          >
-            <Text style={[styles.streakValue, { color: theme.colors.text }]}>{stats.bestStreak}{starIcon}</Text>
-            <Text style={[styles.streakLabel, { color: theme.colors.textMuted }]}>Best Streak</Text>
-          </View>
-        </View>
-
-        <View style={styles.actions}>
-          <PrimaryButton label="View Wins List" variant="ghost" onPress={() => navigation.navigate('wins')} />
-          <PrimaryButton label="Calendar" variant="ghost" onPress={() => navigation.navigate('calendar')} />
-          <PrimaryButton label="Journal" variant="ghost" onPress={() => navigation.navigate('ai')} />
+          <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>Auto-saves while you type.</Text>
           <PrimaryButton
-            label="Profile"
+            label="Clear Intention"
             variant="ghost"
-            onPress={() => navigation.navigate('profile', { name })}
+            onPress={handleClearIntention}
+            disabled={!intentionInput}
           />
+        </View>
+
+        <View
+          style={[
+            styles.actionsCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Keep exploring</Text>
+          <Text style={[styles.sectionCopy, { color: theme.colors.textMuted }]}>
+            Review your log, check the calendar, or open a reflection session.
+          </Text>
+          <View style={styles.actions}>
+            <PrimaryButton label="Open Moments" variant="ghost" onPress={() => navigation.navigate('wins')} />
+            <PrimaryButton label="Open Calendar" variant="ghost" onPress={() => navigation.navigate('calendar')} />
+            <PrimaryButton label="Open Reflect" variant="ghost" onPress={() => navigation.navigate('ai')} />
+            <PrimaryButton label="Open Profile" variant="ghost" onPress={() => navigation.navigate('profile', { name })} />
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -327,13 +335,22 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: WinsTheme.spacing.lg,
   },
   content: {
+    padding: WinsTheme.spacing.lg,
     paddingBottom: WinsTheme.spacing.xl,
+    gap: WinsTheme.spacing.lg,
   },
-  hero: {
-    marginBottom: WinsTheme.spacing.lg,
+  heroCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    gap: WinsTheme.spacing.sm,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: WinsTheme.spacing.sm,
   },
   heroBadge: {
@@ -350,35 +367,128 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontFamily: WinsTheme.fonts.body,
   },
-  greeting: {
-    fontSize: 28,
+  heroPercent: {
+    fontSize: 13,
     fontWeight: '700',
-    color: WinsTheme.colors.text,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  greeting: {
+    fontSize: 30,
+    fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
     letterSpacing: 0.2,
   },
   subtitle: {
     fontSize: 15,
-    color: WinsTheme.colors.textMuted,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 21,
+  },
+  progressTrack: {
+    height: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: WinsTheme.spacing.sm,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  progressText: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: WinsTheme.spacing.sm,
+    marginTop: WinsTheme.spacing.sm,
+  },
+  heroStatCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    padding: WinsTheme.spacing.md,
+  },
+  heroStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
+  },
+  heroStatLabel: {
+    marginTop: 4,
+    fontSize: 11,
+    fontFamily: WinsTheme.fonts.body,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  card: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    gap: WinsTheme.spacing.md,
+  },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
+  },
+  sectionCopy: {
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
     lineHeight: 20,
   },
-  card: {
-    marginTop: WinsTheme.spacing.md,
-    backgroundColor: WinsTheme.colors.surface,
-    borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
+  categoryBlock: {
+    gap: WinsTheme.spacing.sm,
+  },
+  categoryLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  categoryChips: {
+    gap: WinsTheme.spacing.sm,
+    paddingRight: WinsTheme.spacing.sm,
+  },
+  categoryChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    paddingHorizontal: WinsTheme.spacing.md,
+    paddingVertical: 14,
+    minHeight: 88,
+    fontSize: 16,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 22,
+    textAlignVertical: 'top',
+  },
+  focusGrid: {
+    flexDirection: 'row',
     gap: WinsTheme.spacing.md,
   },
-  goalCard: {
-    marginTop: WinsTheme.spacing.lg,
-    backgroundColor: WinsTheme.colors.surface,
+  focusCard: {
+    flex: 1,
     borderRadius: WinsTheme.radius.lg,
     padding: WinsTheme.spacing.lg,
     borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
     gap: WinsTheme.spacing.sm,
   },
   goalRow: {
@@ -396,10 +506,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: WinsTheme.radius.md,
     paddingHorizontal: WinsTheme.spacing.md,
-    paddingVertical: 8,
-    minWidth: 72,
+    paddingVertical: 10,
+    minWidth: 78,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
   },
@@ -412,7 +522,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   goalCountValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
   },
@@ -421,143 +531,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
   },
-  goalBar: {
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    overflow: 'hidden',
+  summaryValue: {
+    fontSize: 30,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
   },
-  goalBarFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  goalHelper: {
+  summaryCopy: {
     fontSize: 13,
     fontFamily: WinsTheme.fonts.body,
-  },
-  intentionCard: {
-    marginTop: WinsTheme.spacing.lg,
-    backgroundColor: WinsTheme.colors.surface,
-    borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
-    borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
-    gap: WinsTheme.spacing.sm,
+    lineHeight: 18,
   },
   intentionInput: {
     borderWidth: 1,
     borderRadius: WinsTheme.radius.md,
     paddingHorizontal: WinsTheme.spacing.md,
-    paddingVertical: 10,
-    minHeight: 80,
+    paddingVertical: 12,
+    minHeight: 100,
     fontSize: 15,
     fontFamily: WinsTheme.fonts.body,
     textAlignVertical: 'top',
     lineHeight: 20,
   },
-  intentionActions: {
-    gap: WinsTheme.spacing.sm,
-  },
   helperText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
   },
-  label: {
-    fontSize: 14,
-    color: WinsTheme.colors.textMuted,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  categoryBlock: {
-    gap: WinsTheme.spacing.sm,
-  },
-  categoryLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  categoryChips: {
-    gap: WinsTheme.spacing.sm,
-    paddingRight: WinsTheme.spacing.sm,
-  },
-  categoryChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
+  actionsCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
     borderWidth: 1,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
-    borderRadius: WinsTheme.radius.md,
-    paddingHorizontal: WinsTheme.spacing.md,
-    paddingVertical: 10,
-    minHeight: 46,
-    fontSize: 16,
-    color: WinsTheme.colors.text,
-    fontFamily: WinsTheme.fonts.body,
-    backgroundColor: WinsTheme.colors.surfaceAlt,
-    lineHeight: 22,
-  },
-  statsRow: {
-    marginTop: WinsTheme.spacing.lg,
-    flexDirection: 'row',
     gap: WinsTheme.spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: WinsTheme.colors.surface,
-    borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
-    borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: WinsTheme.colors.text,
-    fontFamily: WinsTheme.fonts.title,
-  },
-  statLabel: {
-    marginTop: 4,
-    fontSize: 13,
-    color: WinsTheme.colors.textMuted,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  streakRow: {
-    marginTop: WinsTheme.spacing.md,
-    flexDirection: 'row',
-    gap: WinsTheme.spacing.md,
-  },
-  streakCard: {
-    flex: 1,
-    backgroundColor: WinsTheme.colors.surface,
-    borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
-    borderWidth: 1,
-    borderColor: WinsTheme.colors.border,
-  },
-  streakValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: WinsTheme.colors.text,
-    fontFamily: WinsTheme.fonts.title,
-  },
-  streakLabel: {
-    marginTop: 4,
-    fontSize: 13,
-    color: WinsTheme.colors.textMuted,
-    fontFamily: WinsTheme.fonts.body,
   },
   actions: {
-    marginTop: WinsTheme.spacing.xl,
     gap: WinsTheme.spacing.sm,
   },
 });
-

@@ -1,17 +1,21 @@
 {
   "expo": {
-    "name": "DailyAchievement",
-    "slug": "DailyAchievement",
+    "name": "Dayflow",
+    "slug": "dayflow",
     "version": "1.0.0",
     "orientation": "portrait",
+    "description": "Dayflow is a gentle progress journal for tracking daily wins, reflections, and momentum.",
     "icon": "./assets/images/icon.png",
-    "scheme": "dailyachievement",
+    "scheme": "dayflow",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mario.dailyachievement"
     },
     "android": {
+      "package": "com.mario.dailyachievement",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,6 +31,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
@@ -43,6 +48,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "da3a719f-5d24-4498-962c-acf6dd4c0795"
+      }
     }
   }
 }

@@ -18,10 +18,30 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
       <View
         pointerEvents="none"
         style={[
-          styles.blobTop,
+          styles.washTop,
+          {
+            backgroundColor: theme.colors.hero,
+            opacity: isDark ? 0.5 : 0.9,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.blobRight,
           {
             backgroundColor: theme.colors.accentSoft,
-            opacity: isDark ? 0.18 : 0.55,
+            opacity: isDark ? 0.28 : 0.75,
+          },
+        ]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.blobLeft,
+          {
+            backgroundColor: theme.colors.accentAlt,
+            opacity: isDark ? 0.22 : 0.5,
           },
         ]}
       />
@@ -31,7 +51,7 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
           styles.blobBottom,
           {
             backgroundColor: theme.colors.highlight,
-            opacity: isDark ? 0.2 : 0.45,
+            opacity: isDark ? 0.18 : 0.42,
           },
         ]}
       />
@@ -47,20 +67,37 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
   },
-  blobTop: {
+  washTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    borderBottomLeftRadius: 44,
+    borderBottomRightRadius: 44,
+  },
+  blobRight: {
     position: 'absolute',
     width: 260,
     height: 260,
     borderRadius: 130,
-    top: -90,
-    right: -60,
+    top: 40,
+    right: -90,
+  },
+  blobLeft: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    top: 200,
+    left: -80,
   },
   blobBottom: {
     position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    bottom: -110,
-    left: -70,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    bottom: -170,
+    left: 40,
   },
 });

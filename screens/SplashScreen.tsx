@@ -2,8 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/screen-container';
-import { WinsTheme } from '@/constants/wins-theme';
+import { BRAND_DAILY_PROMPT, BRAND_NAME, BRAND_TAGLINE } from '@/constants/brand';
 import { getTheme } from '@/constants/theme-utils';
+import { WinsTheme } from '@/constants/wins-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
@@ -58,17 +59,31 @@ export default function SplashScreen() {
             styles.card,
             {
               opacity: fade,
-              transform: [{ scale: fade }],
+              transform: [
+                {
+                  scale: fade.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.92, 1],
+                  }),
+                },
+              ],
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
             },
             theme.shadows.card,
           ]}
         >
-          <Text style={[styles.title, { color: theme.colors.text }]}>Small Wins Journal</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-            Celebrate Your Daily Progress
-          </Text>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text style={[styles.badgeText, { color: theme.colors.accent }]}>Daily rhythm</Text>
+          </View>
+          <Text style={[styles.title, { color: theme.colors.text }]}>{BRAND_NAME}</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{BRAND_TAGLINE}</Text>
+          <Text style={[styles.caption, { color: theme.colors.textMuted }]}>{BRAND_DAILY_PROMPT}</Text>
         </Animated.View>
       </View>
     </ScreenContainer>
@@ -88,19 +103,39 @@ const styles = StyleSheet.create({
     paddingVertical: WinsTheme.spacing.xl,
     paddingHorizontal: WinsTheme.spacing.lg,
     borderWidth: 1,
+    gap: WinsTheme.spacing.sm,
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.body,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   title: {
-    fontSize: 30,
+    fontSize: 34,
     fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   subtitle: {
-    marginTop: WinsTheme.spacing.sm,
     fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  caption: {
+    maxWidth: 260,
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    textAlign: 'center',
+    lineHeight: 19,
   },
 });

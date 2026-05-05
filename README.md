@@ -1,50 +1,69 @@
-# Welcome to your Expo app 👋
+# Dayflow
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Dayflow is an Expo app for logging daily wins, mood, and reflections. This project is configured for Expo Application Services (EAS) so you can generate the Android `.apk` needed for your final exam submission.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Local development
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Environment variables
 
-## Learn more
+The app expects these public Expo variables:
 
-To learn more about developing your project with Expo, look at the following resources:
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_GEMINI_API_KEY`
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+For local development, keep them in `.env.local`.
 
-## Join the community
+For EAS cloud builds, add the same values in your Expo project dashboard under Environment Variables before starting the build.
 
-Join our community of developers creating universal apps.
+## Build the exam APK
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Log in to Expo:
+
+   ```bash
+   npx eas-cli login
+   ```
+
+2. Initialize EAS for this project if you have not done it yet:
+
+   ```bash
+   npm run eas:configure
+   ```
+
+   If EAS asks to create or link a project, choose `Yes`.
+
+3. Start the Android APK build:
+
+   ```bash
+   npm run build:apk
+   ```
+
+   This uses the `preview` build profile in `eas.json`, which is configured to generate an installable `.apk`.
+
+4. Wait for the build to finish in the Expo dashboard.
+
+## What to submit for the final exam
+
+Your instructor asked for:
+
+1. A screenshot of your Expo dashboard in the Build module with the `Install` button visible.
+2. The generated `.apk` file.
+
+After the Android build finishes:
+
+- Open your Expo project dashboard.
+- Go to `Builds`.
+- Open the successful Android `preview` build.
+- Take a screenshot that clearly shows the `Install` button.
+- Download the `.apk` from the same build page.
+
+## Notes
+
+- `preview` produces an `.apk`, which is what you need for direct installation and classroom submission.
+- `production` is configured for an Android App Bundle (`.aab`) and is not the file your instructor asked for.
+- If local Expo commands warn about Node, update Node.js to `20.19.4` or newer for the smoothest tooling experience.

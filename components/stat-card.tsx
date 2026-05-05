@@ -34,17 +34,20 @@ export function StatCard({ label, value }: StatCardProps) {
 const styles = StyleSheet.create({
   card: {
     borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
+    padding: WinsTheme.spacing.lg,
     borderWidth: 1,
   },
   value: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
   },
   label: {
-    marginTop: 6,
-    fontSize: 14,
+    marginTop: 8,
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
+    lineHeight: 18,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
   },
 });

@@ -50,21 +50,49 @@ export default function ProfileScreen() {
   return (
     <ScreenContainer>
       <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Profile</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{`Name: ${name}`}</Text>
+        <View
+          style={[
+            styles.heroCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <View style={styles.header}>
+            <View style={styles.nameBlock}>
+              <View
+                style={[
+                  styles.initialBadge,
+                  { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[styles.initialText, { color: theme.colors.accent }]}>
+                  {name.slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+              <View>
+                <Text style={[styles.title, { color: theme.colors.text }]}>Dayflow Profile</Text>
+                <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{`@${name}`}</Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.themeToggle,
+                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>{isDark ? moonIcon : sunIcon}</Text>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{ false: theme.colors.border, true: theme.colors.accentSoft }}
+                thumbColor={isDark ? theme.colors.accent : theme.colors.surface}
+                ios_backgroundColor={theme.colors.border}
+              />
+            </View>
           </View>
-          <View style={styles.themeToggle}>
-            <Text style={{ fontSize: 18 }}>{isDark ? moonIcon : sunIcon}</Text>
-            <Switch
-              value={isDark}
-              onValueChange={toggleTheme}
-              trackColor={{ false: theme.colors.border, true: theme.colors.accentSoft }}
-              thumbColor={isDark ? theme.colors.accent : theme.colors.surface}
-              ios_backgroundColor={theme.colors.border}
-            />
-          </View>
+          <Text style={[styles.heroText, { color: theme.colors.textMuted }]}>
+            Review your rhythm, protect your streaks, and adjust how Dayflow feels.
+          </Text>
         </View>
 
         <View style={styles.statsGrid}>
@@ -104,7 +132,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Weekly Momentum</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Weekly Rhythm</Text>
           <View
             style={[
               styles.chartCard,
@@ -136,7 +164,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.sectionBlock}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Streak History</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Recent Streaks</Text>
           <View
             style={[
               styles.streakHistoryCard,
@@ -165,7 +193,7 @@ export default function ProfileScreen() {
 
         <View style={styles.achievementsSection}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-            Achievements ({unlockedAchievements.length}/{achievements.length})
+            Milestones ({unlockedAchievements.length}/{achievements.length})
           </Text>
           <View style={styles.achievementsGrid}>
             {achievements.map((achievement) => (
@@ -199,7 +227,7 @@ export default function ProfileScreen() {
         >
           <View style={styles.reminderHeader}>
             <View>
-              <Text style={[styles.reminderTitle, { color: theme.colors.text }]}>Daily Reminder</Text>
+              <Text style={[styles.reminderTitle, { color: theme.colors.text }]}>Dayflow Reminder</Text>
               <Text style={[styles.reminderSubtitle, { color: theme.colors.textMuted }]}>
                 {reminderTimeLabel}
               </Text>
@@ -218,7 +246,7 @@ export default function ProfileScreen() {
             />
           </View>
           <Text style={[styles.reminderText, { color: theme.colors.textMuted }]}>
-            Get a gentle nudge to log your daily win.
+            Get a gentle nudge to capture one honest win.
           </Text>
         </View>
 
@@ -229,9 +257,9 @@ export default function ProfileScreen() {
             theme.shadows.card,
           ]}
         >
-          <Text style={[styles.resetTitle, { color: theme.colors.text }]}>Fresh Start</Text>
-          <Text style={[styles.resetText, { color: theme.colors.textMuted }]}>Clear all wins and begin a new streak.</Text>
-          <PrimaryButton label="Clear Wins" variant="ghost" onPress={clearWins} />
+          <Text style={[styles.resetTitle, { color: theme.colors.text }]}>Reset Timeline</Text>
+          <Text style={[styles.resetText, { color: theme.colors.textMuted }]}>Clear all wins and begin a new chapter.</Text>
+          <PrimaryButton label="Clear Timeline" variant="ghost" onPress={clearWins} />
           {isConfigured ? (
             <PrimaryButton label="Sign Out" variant="ghost" onPress={handleSignOut} />
           ) : null}
@@ -245,16 +273,51 @@ const styles = StyleSheet.create({
   container: {
     padding: WinsTheme.spacing.lg,
   },
+  heroCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    marginBottom: WinsTheme.spacing.lg,
+    gap: WinsTheme.spacing.sm,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: WinsTheme.spacing.lg,
+    alignItems: 'center',
+    gap: WinsTheme.spacing.md,
+  },
+  nameBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: WinsTheme.spacing.md,
+    flex: 1,
+  },
+  initialBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  initialText: {
+    fontSize: 22,
+    fontWeight: '700',
+    fontFamily: WinsTheme.fonts.title,
   },
   themeToggle: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     gap: WinsTheme.spacing.sm,
+  },
+  heroText: {
+    fontSize: 14,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 20,
   },
   title: {
     fontSize: 26,
@@ -271,7 +334,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   statsGrid: {
-    marginTop: WinsTheme.spacing.lg,
     gap: WinsTheme.spacing.md,
   },
   streakContainer: {

@@ -21,7 +21,7 @@ export function PrimaryButton({
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const isPrimary = variant === 'primary';
-  const textColor = isPrimary ? theme.colors.onAccent : theme.colors.text;
+  const textColor = isPrimary ? theme.colors.onAccent : theme.colors.accent;
 
   return (
     <Pressable
@@ -30,13 +30,14 @@ export function PrimaryButton({
       style={({ pressed }) => [
         styles.base,
         {
-          backgroundColor: isPrimary ? theme.colors.accent : theme.colors.surfaceAlt,
+          backgroundColor: isPrimary ? theme.colors.accent : theme.colors.surface,
           borderColor: isPrimary ? theme.colors.accent : theme.colors.border,
         },
         isPrimary ? theme.shadows.soft : null,
         disabled ? styles.disabled : null,
         pressed && !disabled ? styles.pressed : null,
-      ]}>
+      ]}
+    >
       <Text style={[styles.text, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
@@ -44,22 +45,22 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   base: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 18,
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: WinsTheme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   text: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     fontFamily: WinsTheme.fonts.body,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.9,
     transform: [{ scale: 0.98 }],
   },
   disabled: {

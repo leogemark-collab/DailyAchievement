@@ -55,8 +55,8 @@ const scheduleReminder = async (Notifications: NotificationsModule) => {
   await ensureNotificationChannel(Notifications);
   return Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Time to log a small win',
-      body: 'Take 30 seconds to celebrate your progress today.',
+      title: 'Dayflow check-in',
+      body: 'Pause for a moment and log one thing that moved forward today.',
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,

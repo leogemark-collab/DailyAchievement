@@ -2,17 +2,17 @@ import { Fonts } from '@/constants/theme';
 
 export const WinsTheme = {
   colors: {
-    background: '#F7F8FA',
+    background: '#FFF7F0',
     surface: '#FFFFFF',
-    surfaceAlt: '#EEF2F6',
-    accent: '#0F766E',
-    accentSoft: '#D1FAE5',
-    highlight: '#FDE68A',
-    text: '#0F172A',
-    textMuted: '#64748B',
-    border: '#E2E8F0',
-    danger: '#E11D48',
-    dangerSoft: '#FFE4E6',
+    surfaceAlt: '#F8EDE3',
+    accent: '#D96C4F',
+    accentSoft: '#F5D6C8',
+    highlight: '#F4C978',
+    text: '#221914',
+    textMuted: '#6F6058',
+    border: '#E8D8CC',
+    danger: '#C74E5C',
+    dangerSoft: '#FAD7DD',
     onAccent: '#FFFFFF',
   },
   fonts: {
@@ -27,8 +27,8 @@ export const WinsTheme = {
     xl: 32,
   },
   radius: {
-    sm: 12,
-    md: 18,
-    lg: 26,
+    sm: 14,
+    md: 22,
+    lg: 30,
   },
 };

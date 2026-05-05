@@ -1,28 +1,23 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
-
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0F766E';
-const tintColorDark = '#2DD4BF';
+const tintColorLight = '#D96C4F';
+const tintColorDark = '#F2A283';
 
 export const Colors = {
   light: {
-    text: '#0F172A',
-    background: '#F7F8FA',
+    text: '#221914',
+    background: '#FFF7F0',
     tint: tintColorLight,
-    icon: '#64748B',
-    tabIconDefault: '#64748B',
+    icon: '#7D6E65',
+    tabIconDefault: '#A09186',
     tabIconSelected: tintColorLight,
   },
   dark: {
-    text: '#E6EDF3',
-    background: '#0B0F14',
+    text: '#F8EFE8',
+    background: '#16110D',
     tint: tintColorDark,
-    icon: '#94A3B8',
-    tabIconDefault: '#94A3B8',
+    icon: '#B7A79D',
+    tabIconDefault: '#7D7068',
     tabIconSelected: tintColorDark,
   },
 };
@@ -30,20 +25,20 @@ export const Colors = {
 export const Fonts = Platform.select({
   ios: {
     sans: 'Avenir Next',
-    serif: 'Iowan Old Style',
+    serif: 'Georgia',
     rounded: 'Avenir Next',
     mono: 'Menlo',
   },
   default: {
-    sans: 'sans-serif-condensed',
+    sans: 'sans-serif',
     serif: 'serif',
     rounded: 'sans-serif-medium',
     mono: 'monospace',
   },
   web: {
-    sans: "'Avenir Next', 'Atkinson Hyperlegible', 'Trebuchet MS', 'Segoe UI', sans-serif",
-    serif: "'Iowan Old Style', 'Georgia', 'Times New Roman', serif",
-    rounded: "'Avenir Next Rounded', 'Avenir Next', 'Trebuchet MS', sans-serif",
+    sans: "'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif",
+    serif: "'Georgia', 'Palatino Linotype', 'Times New Roman', serif",
+    rounded: "'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
   },
 });

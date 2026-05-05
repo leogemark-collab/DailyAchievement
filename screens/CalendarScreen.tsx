@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenContainer } from '@/components/screen-container';
 import { getCategoryMeta } from '@/constants/win-categories';
@@ -194,32 +195,60 @@ export default function CalendarScreen() {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Calendar</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              {monthLabel}
-            </Text>
+        <View
+          style={[
+            styles.headerCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.shadows.card,
+          ]}
+        >
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.title, { color: theme.colors.text }]}>Flow Calendar</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+                {monthLabel}
+              </Text>
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => handleMonthChange('prev')}
+                style={[
+                  styles.headerButton,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+              >
+                <Ionicons name="chevron-back" size={16} color={theme.colors.text} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const today = new Date();
+                  setDisplayDate(today);
+                  setSelectedDayKey(todayKey);
+                }}
+                style={[
+                  styles.headerButton,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+              >
+                <Text style={[styles.headerButtonText, { color: theme.colors.text }]}>Today</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleMonthChange('next')}
+                style={[
+                  styles.headerButton,
+                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                ]}
+              >
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.text} />
+              </Pressable>
+            </View>
           </View>
+          <Text style={[styles.headerCopy, { color: theme.colors.textMuted }]}>
+            See how your wins, moods, and reflections moved through the month.
+          </Text>
           <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => handleMonthChange('prev')}
-              style={[
-                styles.headerButton,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-              ]}
-            >
-              <Text style={[styles.headerButtonText, { color: theme.colors.text }]}>Prev</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleMonthChange('next')}
-              style={[
-                styles.headerButton,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-              ]}
-            >
-              <Text style={[styles.headerButtonText, { color: theme.colors.text }]}>Next</Text>
-            </Pressable>
+            <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>W = wins</Text>
+            <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>J = journal</Text>
           </View>
         </View>
 
@@ -430,19 +459,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: WinsTheme.spacing.md,
   },
+  headerCard: {
+    borderRadius: WinsTheme.radius.lg,
+    padding: WinsTheme.spacing.lg,
+    borderWidth: 1,
+    gap: WinsTheme.spacing.sm,
+  },
   headerActions: {
     flexDirection: 'row',
     gap: WinsTheme.spacing.sm,
+    alignItems: 'center',
   },
   headerButton: {
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    minWidth: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerButtonText: {
     fontSize: 12,
     fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  headerCopy: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 19,
+  },
+  legendText: {
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
   },
   title: {

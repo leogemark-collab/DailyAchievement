@@ -1,52 +1,62 @@
 import { Fonts } from '@/constants/theme';
 
 const lightColors = {
-  background: '#F7F8FA',
+  background: '#FFF7F0',
   surface: '#FFFFFF',
-  surfaceAlt: '#EEF2F6',
-  accent: '#0F766E',
-  accentSoft: '#D1FAE5',
-  highlight: '#FDE68A',
-  text: '#0F172A',
-  textMuted: '#64748B',
-  border: '#E2E8F0',
-  danger: '#E11D48',
-  dangerSoft: '#FFE4E6',
+  surfaceAlt: '#F8EDE3',
+  accent: '#D96C4F',
+  accentSoft: '#F5D6C8',
+  accentAlt: '#A7CCC6',
+  highlight: '#F4C978',
+  hero: '#FDE7DA',
+  heroAlt: '#F6F0E5',
+  text: '#221914',
+  textMuted: '#6F6058',
+  border: '#E8D8CC',
+  danger: '#C74E5C',
+  dangerSoft: '#FAD7DD',
+  success: '#477E63',
+  successSoft: '#DBEEE1',
   onAccent: '#FFFFFF',
 };
 
 const darkColors = {
-  background: '#0B0F14',
-  surface: '#121A24',
-  surfaceAlt: '#192433',
-  accent: '#2DD4BF',
-  accentSoft: '#163B34',
-  highlight: '#3A2B14',
-  text: '#E6EDF3',
-  textMuted: '#94A3B8',
-  border: '#223041',
-  danger: '#FB7185',
-  dangerSoft: '#3A1B24',
-  onAccent: '#0B0F14',
+  background: '#16110D',
+  surface: '#221A15',
+  surfaceAlt: '#30251F',
+  accent: '#F2A283',
+  accentSoft: '#4A2C24',
+  accentAlt: '#335A5A',
+  highlight: '#5A4321',
+  hero: '#332118',
+  heroAlt: '#281D18',
+  text: '#F8EFE8',
+  textMuted: '#B8A79D',
+  border: '#3B2F28',
+  danger: '#FF8A98',
+  dangerSoft: '#47232A',
+  success: '#7EC59A',
+  successSoft: '#213A2F',
+  onAccent: '#1B120E',
 };
 
 export const getTheme = (isDark: boolean) => {
   const colors = isDark ? darkColors : lightColors;
-  const shadowColor = isDark ? '#000000' : '#0F172A';
+  const shadowColor = isDark ? '#000000' : '#54301E';
   const shadows = {
     card: {
       shadowColor,
-      shadowOpacity: isDark ? 0.35 : 0.12,
-      shadowRadius: isDark ? 18 : 14,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: isDark ? 10 : 6,
+      shadowOpacity: isDark ? 0.32 : 0.14,
+      shadowRadius: isDark ? 22 : 18,
+      shadowOffset: { width: 0, height: 14 },
+      elevation: isDark ? 11 : 7,
     },
     soft: {
       shadowColor,
-      shadowOpacity: isDark ? 0.25 : 0.08,
-      shadowRadius: isDark ? 10 : 8,
-      shadowOffset: { width: 0, height: 5 },
-      elevation: isDark ? 5 : 3,
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: isDark ? 14 : 10,
+      shadowOffset: { width: 0, height: 7 },
+      elevation: isDark ? 6 : 3,
     },
   };
 
@@ -65,9 +75,9 @@ export const getTheme = (isDark: boolean) => {
       xl: 32,
     },
     radius: {
-      sm: 12,
-      md: 18,
-      lg: 26,
+      sm: 14,
+      md: 22,
+      lg: 30,
     },
   };
 };
