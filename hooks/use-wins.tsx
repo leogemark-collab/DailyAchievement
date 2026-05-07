@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DEFAULT_CATEGORY } from '@/constants/win-categories';
-import { useAuth } from '@/hooks/use-auth';
+import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import type { Achievement, Win } from '@/types/win';
 import {
   DEFAULT_DAILY_GOAL,
@@ -346,13 +346,6 @@ const checkUnlockedAchievements = (
   });
 };
 
-const getAuthUserName = (metadataUsername: unknown, email?: string | null) => {
-  if (typeof metadataUsername === 'string' && metadataUsername.trim()) {
-    return metadataUsername.trim();
-  }
-  return email?.split('@')[0]?.trim() ?? '';
-};
-
 export function WinsProvider({ children }: { children: React.ReactNode }) {
   const { user, isConfigured } = useAuth();
   const [userName, setUserName] = useState('');
@@ -366,7 +359,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
   const winsSyncRef = useRef(Promise.resolve());
 
   const activeUserId = isConfigured ? user?.id ?? null : null;
-  const authUserName = getAuthUserName(user?.user_metadata?.username, user?.email);
+  const authUserName = getAuthDisplayName(user);
   const todayLabel = formatDate(new Date());
 
   const applyBundle = useCallback(

@@ -3,33 +3,64 @@ import type { Session, User } from '@supabase/supabase-js';
 
 import {
   isSupabaseConfigured,
-  normalizeUsername,
+  normalizeEmail,
   supabase,
-  usernameToEmail,
-  validateUsername,
+  validateEmail,
 } from '@/utils/supabase';
+
+type SignUpResult = {
+  displayName: string;
+  requiresEmailConfirmation: boolean;
+};
 
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
   isReady: boolean;
   isConfigured: boolean;
-  signInWithUsername: (username: string, password: string) => Promise<string>;
-  signUpWithUsername: (username: string, password: string) => Promise<string>;
+  signInWithEmail: (email: string, password: string) => Promise<string>;
+  signUpWithEmail: (email: string, password: string, displayName: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
 
-const getUsernameFromUser = (user: User | null) => {
+export const getAuthDisplayName = (user: User | null) => {
   const metadataUsername = user?.user_metadata?.username;
   if (typeof metadataUsername === 'string' && metadataUsername.trim()) {
     return metadataUsername.trim();
   }
 
+  const fullName = user?.user_metadata?.full_name;
+  if (typeof fullName === 'string' && fullName.trim()) {
+    return fullName.trim();
+  }
+
   const email = user?.email;
   if (!email) return '';
   return email.split('@')[0] ?? '';
+};
+
+const mapAuthError = (message: string) => {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('email not confirmed')) {
+    return 'Check your email and confirm your account before signing in.';
+  }
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'Incorrect email or password.';
+  }
+
+  if (normalized.includes('user already registered')) {
+    return 'This email already has an account. Switch to Sign In instead.';
+  }
+
+  if (normalized.includes('rate limit')) {
+    return 'Too many signup emails were requested. Supabase built-in email sending is limited, so wait before retrying, or disable Confirm email for development / add custom SMTP.';
+  }
+
+  return message;
 };
 
 const ensureConfigured = () => {
@@ -40,10 +71,10 @@ const ensureConfigured = () => {
   }
 };
 
-const validateCredentials = (username: string, password: string) => {
-  const normalized = normalizeUsername(username);
-  if (!validateUsername(normalized)) {
-    throw new Error('Username must be 3-24 characters and use only letters, numbers, ".", "_" or "-".');
+const validateCredentials = (email: string, password: string) => {
+  const normalized = normalizeEmail(email);
+  if (!validateEmail(normalized)) {
+    throw new Error('Enter a valid email address.');
   }
   if (password.length < 6) {
     throw new Error('Password must be at least 6 characters long.');
@@ -88,45 +119,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signInWithUsername = async (username: string, password: string) => {
+  const signInWithEmail = async (email: string, password: string) => {
     ensureConfigured();
-    const normalized = validateCredentials(username, password);
+    const normalized = validateCredentials(email, password);
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: usernameToEmail(normalized),
+      email: normalized,
       password,
     });
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(mapAuthError(error.message));
     }
 
-    return getUsernameFromUser(data.user) || normalized;
+    return getAuthDisplayName(data.user) || normalized.split('@')[0];
   };
 
-  const signUpWithUsername = async (username: string, password: string) => {
+  const signUpWithEmail = async (email: string, password: string, displayName: string) => {
     ensureConfigured();
-    const normalized = validateCredentials(username, password);
+    const normalized = validateCredentials(email, password);
+    const trimmedDisplayName = displayName.trim();
+    if (trimmedDisplayName.length < 2) {
+      throw new Error('Name must be at least 2 characters long.');
+    }
+
     const { data, error } = await supabase.auth.signUp({
-      email: usernameToEmail(normalized),
+      email: normalized,
       password,
       options: {
         data: {
-          username: normalized,
+          username: trimmedDisplayName,
+          full_name: trimmedDisplayName,
         },
       },
     });
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(mapAuthError(error.message));
     }
 
-    if (!data.session) {
-      throw new Error(
-        'Account created, but email confirmation is still enabled in Supabase. Turn off Confirm email in Auth > Providers > Email so username login works immediately.'
-      );
-    }
-
-    return getUsernameFromUser(data.user) || normalized;
+    return {
+      displayName: getAuthDisplayName(data.user) || trimmedDisplayName,
+      requiresEmailConfirmation: !data.session,
+    };
   };
 
   const signOut = async () => {
@@ -144,8 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isReady,
         isConfigured: isSupabaseConfigured,
-        signInWithUsername,
-        signUpWithUsername,
+        signInWithEmail,
+        signUpWithEmail,
         signOut,
       }}
     >

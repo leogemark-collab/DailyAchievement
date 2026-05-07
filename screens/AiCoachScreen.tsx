@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
 import { WinsTheme } from '@/constants/wins-theme';
-import { useAuth } from '@/hooks/use-auth';
+import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { getTheme } from '@/constants/theme-utils';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
@@ -313,10 +313,7 @@ export default function AiCoachScreen() {
   const entriesSyncRef = useRef(Promise.resolve());
   const moodsSyncRef = useRef(Promise.resolve());
 
-  const authUserName =
-    typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
-      ? user.user_metadata.username.trim()
-      : (user?.email?.split('@')[0] ?? '');
+  const authUserName = getAuthDisplayName(user);
   const activeUserId = isConfigured ? user?.id ?? null : null;
   const name = userName || authUserName || 'Friend';
   const todayKey = toDayKey(new Date());

@@ -14,7 +14,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { BRAND_NAME, BRAND_PROMISE, BRAND_TAGLINE } from '@/constants/brand';
 import { getTheme } from '@/constants/theme-utils';
 import { WinsTheme } from '@/constants/wins-theme';
-import { useAuth } from '@/hooks/use-auth';
+import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
 import { useTypedNavigation } from '@/navigation/typed-navigation';
@@ -24,43 +24,55 @@ const FEATURE_PILLS = ['Track wins', 'Reflect gently', 'Build momentum'];
 export default function LoginScreen() {
   const navigation = useTypedNavigation();
   const { setUserName } = useWins();
-  const { signInWithUsername, signUpWithUsername, isReady, session, user, isConfigured } =
-    useAuth();
+  const { signInWithEmail, signUpWithEmail, isReady, session, user, isConfigured } = useAuth();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
-  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isReady || !session?.user) return;
-    const savedUsername =
-      typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
-        ? user.user_metadata.username.trim()
-        : (user?.email?.split('@')[0] ?? '');
+    const savedName = getAuthDisplayName(user);
 
-    if (!savedUsername) return;
-    setUserName(savedUsername);
-    navigation.navigate('dashboard', { name: savedUsername });
+    if (!savedName) return;
+    setUserName(savedName);
+    navigation.navigate('dashboard', { name: savedName });
   }, [isReady, navigation, session, setUserName, user]);
 
   const handleSubmit = async () => {
-    const trimmedUsername = username.trim();
-    if (!trimmedUsername || !password) return;
+    const trimmedEmail = email.trim();
+    const trimmedName = displayName.trim();
+    if (!trimmedEmail || !password) return;
 
     setIsSubmitting(true);
     setError('');
+    setNotice('');
 
     try {
-      const resolvedUsername =
-        mode === 'sign-in'
-          ? await signInWithUsername(trimmedUsername, password)
-          : await signUpWithUsername(trimmedUsername, password);
+      if (mode === 'sign-in') {
+        const resolvedName = await signInWithEmail(trimmedEmail, password);
+        setUserName(resolvedName);
+        navigation.navigate('dashboard', { name: resolvedName });
+      } else {
+        const result = await signUpWithEmail(trimmedEmail, password, trimmedName);
 
-      setUserName(resolvedUsername);
-      navigation.navigate('dashboard', { name: resolvedUsername });
+        if (result.requiresEmailConfirmation) {
+          setNotice(
+            'Account created. Check your email to confirm it, then come back and sign in. If you already created this account earlier, use Sign In instead of requesting another signup email.'
+          );
+          setMode('sign-in');
+          setPassword('');
+          return;
+        }
+
+        setUserName(result.displayName);
+        navigation.navigate('dashboard', { name: result.displayName });
+      }
     } catch (submitError) {
       setError((submitError as Error).message);
     } finally {
@@ -68,19 +80,24 @@ export default function LoginScreen() {
     }
   };
 
-  const isFormReady = username.trim().length > 0 && password.length >= 6 && !isSubmitting;
-  const title = mode === 'sign-in' ? `Welcome back to ${BRAND_NAME}` : `Create your ${BRAND_NAME} space`;
+  const isFormReady =
+    email.trim().length > 0 &&
+    password.length >= 6 &&
+    (mode === 'sign-in' || displayName.trim().length >= 2) &&
+    !isSubmitting;
+  const title =
+    mode === 'sign-in' ? `Welcome back to ${BRAND_NAME}` : `Create your ${BRAND_NAME} account`;
   const subtitle =
     mode === 'sign-in'
-      ? 'Pick up your rhythm, review what moved forward, and keep the streak alive.'
-      : 'Set up a simple account so your wins, reflections, and momentum stay with you.';
+      ? 'Sign in with your email to sync your wins, reflections, and progress.'
+      : 'Use email and password so your Supabase data stays connected to your account.';
   const ctaLabel = isSubmitting
     ? mode === 'sign-in'
       ? 'Signing in...'
       : 'Creating account...'
     : mode === 'sign-in'
-      ? 'Enter Dayflow'
-      : 'Create Dayflow Account';
+      ? 'Sign In'
+      : 'Create Account';
 
   return (
     <ScreenContainer>
@@ -141,6 +158,7 @@ export default function LoginScreen() {
               onPress={() => {
                 setMode('sign-in');
                 setError('');
+                setNotice('');
               }}
               style={[
                 styles.modeChip,
@@ -163,6 +181,7 @@ export default function LoginScreen() {
               onPress={() => {
                 setMode('sign-up');
                 setError('');
+                setNotice('');
               }}
               style={[
                 styles.modeChip,
@@ -183,11 +202,46 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Username</Text>
+          {mode === 'sign-up' ? (
+            <>
+              <Text style={[styles.label, { color: theme.colors.textMuted }]}>Name</Text>
+              <TextInput
+                placeholder="Alex"
+                value={displayName}
+                onChangeText={(value) => {
+                  setDisplayName(value);
+                  if (error || notice) {
+                    setError('');
+                    setNotice('');
+                  }
+                }}
+                style={[
+                  styles.input,
+                  {
+                    color: theme.colors.text,
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surfaceAlt,
+                  },
+                ]}
+                placeholderTextColor={theme.colors.textMuted}
+                selectionColor={theme.colors.accent}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </>
+          ) : null}
+
+          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Email</Text>
           <TextInput
-            placeholder="leo"
-            value={username}
-            onChangeText={setUsername}
+            placeholder="student@example.com"
+            value={email}
+            onChangeText={(value) => {
+              setEmail(value);
+              if (error || notice) {
+                setError('');
+                setNotice('');
+              }
+            }}
             style={[
               styles.input,
               {
@@ -200,12 +254,19 @@ export default function LoginScreen() {
             selectionColor={theme.colors.accent}
             autoCapitalize="none"
             autoCorrect={false}
+            keyboardType="email-address"
           />
           <Text style={[styles.label, { color: theme.colors.textMuted }]}>Password</Text>
           <TextInput
             placeholder="At least 6 characters"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              if (error || notice) {
+                setError('');
+                setNotice('');
+              }
+            }}
             style={[
               styles.input,
               {
@@ -227,9 +288,12 @@ export default function LoginScreen() {
           ) : null}
           {mode === 'sign-up' ? (
             <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
-              In Supabase, disable Confirm email in the Email provider settings so username
-              accounts can log in right away.
+              If Supabase Confirm email is enabled, you will need to verify your email before the
+              first sign in.
             </Text>
+          ) : null}
+          {notice ? (
+            <Text style={[styles.noticeText, { color: theme.colors.accent }]}>{notice}</Text>
           ) : null}
           {error ? (
             <Text style={[styles.errorText, { color: theme.colors.danger }]}>{error}</Text>
@@ -368,6 +432,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   helperText: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 18,
+  },
+  noticeText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
     lineHeight: 18,

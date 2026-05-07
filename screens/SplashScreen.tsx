@@ -5,7 +5,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { BRAND_DAILY_PROMPT, BRAND_NAME, BRAND_TAGLINE } from '@/constants/brand';
 import { getTheme } from '@/constants/theme-utils';
 import { WinsTheme } from '@/constants/wins-theme';
-import { useAuth } from '@/hooks/use-auth';
+import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
 import { useTypedNavigation } from '@/navigation/typed-navigation';
@@ -36,10 +36,7 @@ export default function SplashScreen() {
 
     const timer = setTimeout(() => {
       if (isConfigured && session?.user) {
-        const username =
-          typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
-            ? user.user_metadata.username.trim()
-            : (user?.email?.split('@')[0] ?? 'Friend');
+        const username = getAuthDisplayName(user) || 'Friend';
         setUserName(username);
         navigation.navigate('dashboard', { name: username });
         return;

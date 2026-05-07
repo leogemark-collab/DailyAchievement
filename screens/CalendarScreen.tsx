@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { getCategoryMeta } from '@/constants/win-categories';
 import { WinsTheme } from '@/constants/wins-theme';
 import { getTheme } from '@/constants/theme-utils';
-import { useAuth } from '@/hooks/use-auth';
+import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
 import type { DailyMoodMap, JournalEntry } from '@/types/journal';
@@ -44,10 +44,7 @@ export default function CalendarScreen() {
   const [selectedDayKey, setSelectedDayKey] = useState(toDayKey(new Date()));
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [dailyMoods, setDailyMoods] = useState<DailyMoodMap>({});
-  const authUserName =
-    typeof user?.user_metadata?.username === 'string' && user.user_metadata.username.trim()
-      ? user.user_metadata.username.trim()
-      : (user?.email?.split('@')[0] ?? '');
+  const authUserName = getAuthDisplayName(user);
   const activeUserId = isConfigured ? user?.id ?? null : null;
 
   const loadJournalData = useCallback(async () => {
