@@ -33,6 +33,13 @@
       "expo-router",
       "expo-notifications",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Dayflow to access your photos so you can choose pictures for your profile, wins, and journal entries.",
+          "cameraPermission": "Allow Dayflow to use your camera so you can take pictures for your profile, wins, and journal entries."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

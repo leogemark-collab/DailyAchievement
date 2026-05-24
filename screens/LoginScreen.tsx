@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
@@ -17,12 +18,11 @@ import { WinsTheme } from '@/constants/wins-theme';
 import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
-import { useTypedNavigation } from '@/navigation/typed-navigation';
 
 const FEATURE_PILLS = ['Track wins', 'Reflect gently', 'Build momentum'];
 
 export default function LoginScreen() {
-  const navigation = useTypedNavigation();
+  const router = useRouter();
   const { setUserName } = useWins();
   const { signInWithEmail, signUpWithEmail, isReady, session, user, isConfigured } = useAuth();
   const { isDark } = useTheme();
@@ -41,8 +41,8 @@ export default function LoginScreen() {
 
     if (!savedName) return;
     setUserName(savedName);
-    navigation.navigate('dashboard', { name: savedName });
-  }, [isReady, navigation, session, setUserName, user]);
+    router.replace('/dashboard');
+  }, [isReady, router, session, setUserName, user]);
 
   const handleSubmit = async () => {
     const trimmedEmail = email.trim();
@@ -57,7 +57,7 @@ export default function LoginScreen() {
       if (mode === 'sign-in') {
         const resolvedName = await signInWithEmail(trimmedEmail, password);
         setUserName(resolvedName);
-        navigation.navigate('dashboard', { name: resolvedName });
+        router.replace('/dashboard');
       } else {
         const result = await signUpWithEmail(trimmedEmail, password, trimmedName);
 
@@ -71,7 +71,7 @@ export default function LoginScreen() {
         }
 
         setUserName(result.displayName);
-        navigation.navigate('dashboard', { name: result.displayName });
+        router.replace('/dashboard');
       }
     } catch (submitError) {
       setError((submitError as Error).message);
@@ -120,7 +120,9 @@ export default function LoginScreen() {
               { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
             ]}
           >
-            <Text style={[styles.brandBadgeText, { color: theme.colors.accent }]}>New brand</Text>
+            <Text style={[styles.brandBadgeText, { color: theme.colors.accent }]}>
+              Daily progress
+            </Text>
           </View>
           <Text style={[styles.brandName, { color: theme.colors.text }]}>{BRAND_NAME}</Text>
           <Text style={[styles.heroTagline, { color: theme.colors.textMuted }]}>{BRAND_TAGLINE}</Text>

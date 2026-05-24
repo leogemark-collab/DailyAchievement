@@ -7,6 +7,7 @@ import {
   DEFAULT_DAILY_GOAL,
   loadLocalWinsBundle,
   loadRemoteWinsBundle,
+  mergeWinsWithLocalImages,
   replaceRemoteWins,
   saveLocalWinsBundle,
   saveRemoteSettings,
@@ -32,15 +33,17 @@ type WinStats = {
 type WinsContextValue = {
   userName: string;
   setUserName: (name: string) => void;
+  profileImageUri: string | null;
+  setProfileImageUri: (uri: string | null) => void;
   dailyGoal: number;
   setDailyGoal: (goal: number) => void;
   dailyIntention: string;
   setDailyIntention: (intention: string) => void;
   wins: Win[];
-  addWin: (text: string, category?: Win['category'], date?: Date) => void;
+  addWin: (text: string, category?: Win['category'], imageUri?: string, date?: Date) => void;
   editWin: (id: string, newText: string) => void;
   deleteWin: (id: string) => void;
-  clearWins: () => void;
+  clearWins: () => Promise<void>;
   stats: WinStats;
   todayLabel: string;
   achievements: Achievement[];
@@ -349,6 +352,7 @@ const checkUnlockedAchievements = (
 export function WinsProvider({ children }: { children: React.ReactNode }) {
   const { user, isConfigured } = useAuth();
   const [userName, setUserName] = useState('');
+  const [profileImageUri, setProfileImageUriState] = useState<string | null>(null);
   const [dailyGoal, setDailyGoalState] = useState(DEFAULT_DAILY_GOAL);
   const [dailyIntention, setDailyIntentionState] = useState('');
   const [wins, setWins] = useState<Win[]>([]);
@@ -365,6 +369,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
   const applyBundle = useCallback(
     (bundle: WinsBundle) => {
       setUserName(bundle.userName);
+      setProfileImageUriState(bundle.profileImageUri);
       setDailyGoalState(normalizeGoal(bundle.dailyGoal));
       setDailyIntentionState(bundle.dailyIntention);
       setWins(sortWins(bundle.wins));
@@ -399,6 +404,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
         const remoteBundle = await loadRemoteWinsBundle(activeUserId);
         const remoteSnapshot: WinsBundle = {
           userName: remoteBundle.userName ?? '',
+          profileImageUri: scopedLocalBundle.profileImageUri,
           dailyGoal: normalizeGoal(remoteBundle.dailyGoal ?? DEFAULT_DAILY_GOAL),
           dailyIntention: remoteBundle.dailyIntention ?? '',
           achievements: remoteBundle.achievements ?? [],
@@ -407,10 +413,11 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
         let nextBundle: WinsBundle = {
           userName: authUserName || remoteSnapshot.userName || scopedLocalBundle.userName,
+          profileImageUri: remoteSnapshot.profileImageUri ?? scopedLocalBundle.profileImageUri,
           dailyGoal: remoteSnapshot.dailyGoal,
           dailyIntention: remoteSnapshot.dailyIntention,
           achievements: remoteSnapshot.achievements,
-          wins: remoteSnapshot.wins,
+          wins: mergeWinsWithLocalImages(remoteSnapshot.wins, scopedLocalBundle.wins),
         };
 
         if (!userBundleHasMeaningfulData(remoteSnapshot)) {
@@ -423,6 +430,8 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
               ? { ...legacyBundle, userName: authUserName || legacyBundle.userName }
               : {
                   userName: authUserName,
+                  profileImageUri:
+                    scopedLocalBundle.profileImageUri ?? legacyBundle.profileImageUri ?? null,
                   dailyGoal: DEFAULT_DAILY_GOAL,
                   dailyIntention: '',
                   achievements: [],
@@ -436,6 +445,11 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
             await replaceRemoteWins(activeUserId, migrationSource.wins);
           }
         }
+
+        nextBundle = {
+          ...nextBundle,
+          wins: mergeWinsWithLocalImages(nextBundle.wins, scopedLocalBundle.wins),
+        };
 
         await saveLocalWinsBundle(nextBundle, activeUserId);
 
@@ -473,16 +487,26 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     setDailyGoalState(normalizeGoal(goal));
   }, []);
 
+  const setProfileImageUri = useCallback((uri: string | null) => {
+    setProfileImageUriState(uri?.trim() ? uri.trim() : null);
+  }, []);
+
   const setDailyIntention = useCallback((intention: string) => {
     setDailyIntentionState(intention.trim());
   }, []);
 
   const addWin = useCallback(
-    (text: string, category: Win['category'] = DEFAULT_CATEGORY, date = new Date()) => {
+    (
+      text: string,
+      category: Win['category'] = DEFAULT_CATEGORY,
+      imageUri?: string,
+      date = new Date()
+    ) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       const createdAt = date.toISOString();
       const dayKey = toDayKey(date);
+      const normalizedImageUri = typeof imageUri === 'string' && imageUri.trim() ? imageUri.trim() : undefined;
 
       setWins((previous) =>
         sortWins([
@@ -493,6 +517,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
             dayKey,
             category,
             createdAt,
+            imageUri: normalizedImageUri,
           },
           ...previous,
         ])
@@ -514,7 +539,42 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const clearWins = useCallback(() => setWins([]), []);
+  const clearWins = useCallback(async () => {
+    const nextAchievements = DEFAULT_ACHIEVEMENTS;
+    const nextDailyIntention = '';
+    const nextWins: Win[] = [];
+    const nextUserName = activeUserId ? authUserName || userName : userName;
+
+    setWins(nextWins);
+    setAchievements(nextAchievements);
+    setDailyIntentionState(nextDailyIntention);
+
+    const nextBundle: WinsBundle = {
+      userName: nextUserName,
+      profileImageUri,
+      dailyGoal,
+      dailyIntention: nextDailyIntention,
+      achievements: nextAchievements,
+      wins: nextWins,
+    };
+
+    await saveLocalWinsBundle(nextBundle, activeUserId);
+
+    if (activeUserId) {
+      const settings: UserSettingsBundle = {
+        userName: nextUserName,
+        profileImageUri,
+        dailyGoal,
+        dailyIntention: nextDailyIntention,
+        achievements: nextAchievements,
+      };
+
+      await Promise.all([
+        saveRemoteSettings(activeUserId, settings),
+        replaceRemoteWins(activeUserId, nextWins),
+      ]);
+    }
+  }, [activeUserId, authUserName, dailyGoal, profileImageUri, userName]);
 
   const winsByDay = useMemo(() => {
     const grouped: Record<string, Win[]> = {};
@@ -605,6 +665,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
     const bundle: WinsBundle = {
       userName: activeUserId ? authUserName || userName : userName,
+      profileImageUri,
       dailyGoal,
       dailyIntention,
       achievements,
@@ -620,6 +681,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     dailyIntention,
     hydratedScope,
     isHydrated,
+    profileImageUri,
     userName,
     wins,
   ]);
@@ -629,6 +691,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
 
     const settings: UserSettingsBundle = {
       userName: authUserName || userName,
+      profileImageUri,
       dailyGoal,
       dailyIntention,
       achievements,
@@ -648,6 +711,7 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     dailyIntention,
     hydratedScope,
     isHydrated,
+    profileImageUri,
     userName,
   ]);
 
@@ -667,6 +731,8 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
     () => ({
       userName,
       setUserName,
+      profileImageUri,
+      setProfileImageUri,
       dailyGoal,
       setDailyGoal,
       dailyIntention,
@@ -689,8 +755,10 @@ export function WinsProvider({ children }: { children: React.ReactNode }) {
       dailyIntention,
       deleteWin,
       editWin,
+      profileImageUri,
       setDailyGoal,
       setDailyIntention,
+      setProfileImageUri,
       stats,
       todayLabel,
       userName,

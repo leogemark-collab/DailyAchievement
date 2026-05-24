@@ -11,6 +11,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
@@ -19,15 +22,15 @@ import { WIN_CATEGORIES, getCategoryMeta } from '@/constants/win-categories';
 import { WinsTheme } from '@/constants/wins-theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
-import { useTypedNavigation } from '@/navigation/typed-navigation';
 import type { Win } from '@/types/win';
 
 const allCategories = [{ key: 'all', label: 'All', emoji: '' }, ...WIN_CATEGORIES] as const;
 type CategoryFilterKey = (typeof allCategories)[number]['key'];
 
 export default function WinsListScreen() {
-  const navigation = useTypedNavigation();
-  const { wins, stats, userName, deleteWin, editWin } = useWins();
+  const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
+  const { wins, stats, deleteWin, editWin } = useWins();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
   const overlayColor = isDark ? 'rgba(8, 6, 5, 0.72)' : 'rgba(34, 25, 20, 0.38)';
@@ -89,6 +92,9 @@ export default function WinsListScreen() {
         <View style={[styles.listAccent, { backgroundColor: theme.colors.accent }]} />
         <Pressable onPress={() => handleEditWin(item.id, item.text)} style={styles.winContent}>
           <Text style={[styles.winText, { color: theme.colors.text }]}>{item.text}</Text>
+          {item.imageUri ? (
+            <Image source={item.imageUri} style={styles.winImage} contentFit="cover" />
+          ) : null}
           <View style={styles.winMeta}>
             <View
               style={[
@@ -144,7 +150,10 @@ export default function WinsListScreen() {
         data={filteredWins}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarHeight + WinsTheme.spacing.xl },
+        ]}
         ListHeaderComponent={
           <View
             style={[
@@ -255,7 +264,7 @@ export default function WinsListScreen() {
             <PrimaryButton
               label="Go to Today"
               variant="ghost"
-              onPress={() => navigation.navigate('dashboard', { name: userName || 'Friend' })}
+              onPress={() => router.replace('/dashboard')}
             />
           </View>
         }
@@ -420,6 +429,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: WinsTheme.fonts.body,
     lineHeight: 22,
+  },
+  winImage: {
+    width: '100%',
+    height: 164,
+    borderRadius: WinsTheme.radius.md,
+    marginTop: WinsTheme.spacing.sm,
   },
   winMeta: {
     marginTop: WinsTheme.spacing.sm,

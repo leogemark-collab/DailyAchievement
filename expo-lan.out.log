@@ -1,0 +1,14 @@
+env: load .env.local
+env: export EXPO_PUBLIC_GEMINI_API_KEY EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY
+Starting project at C:\Users\mario\Documents\Midterms app\DailyAchievement\DailyAchievement
+React Compiler enabled
+Starting Metro Bundler
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 3197ms node_modules\expo-router\entry.js (1559 modules)
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 146ms node_modules\expo-router\entry.js (1 module)
+ WARN  Failed to load wins from Supabase: Supabase table missing for user_settings. Run supabase/schema.sql in your Supabase SQL editor to create the app tables.
+ WARN  Failed to sync wins to Supabase: Supabase table missing for wins. Run supabase/schema.sql in your Supabase SQL editor to create the app tables.
+ WARN  Failed to sync settings to Supabase: Supabase table missing for user_settings. Run supabase/schema.sql in your Supabase SQL editor to create the app tables.

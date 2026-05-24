@@ -1,7 +1,7 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 
 import { DEFAULT_CATEGORY, WIN_CATEGORIES } from '@/constants/win-categories';
-import type { DailyMoodMap, JournalEntry } from '@/types/journal';
+import type { DailyMoodMap, JournalAnalysis, JournalEntry } from '@/types/journal';
 import type { Achievement, Win } from '@/types/win';
 import { safeAsyncStorage } from '@/utils/safe-storage';
 import { isSupabaseConfigured, supabase } from '@/utils/supabase';
@@ -9,6 +9,7 @@ import { isSupabaseConfigured, supabase } from '@/utils/supabase';
 export const STORAGE_KEYS = {
   wins: 'wins_v1',
   userName: 'wins_user_name_v1',
+  profileImageUri: 'wins_profile_image_uri_v1',
   dailyGoal: 'wins_daily_goal_v1',
   dailyIntention: 'wins_daily_intention_v1',
   achievements: 'wins_achievements_v1',
@@ -20,6 +21,7 @@ export const DEFAULT_DAILY_GOAL = 3;
 
 export type UserSettingsBundle = {
   userName: string;
+  profileImageUri: string | null;
   dailyGoal: number;
   dailyIntention: string;
   achievements: Achievement[];
@@ -56,6 +58,9 @@ const normalizeGoal = (goal: number) => {
   return Math.max(1, rounded);
 };
 
+const normalizeImageUri = (value: unknown) =>
+  typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
 const normalizeAchievementList = (value: unknown): Achievement[] =>
   Array.isArray(value) ? (value as Achievement[]) : [];
 
@@ -86,7 +91,71 @@ const normalizeWin = (win: Partial<Win>): Win | null => {
       typeof win.createdAt === 'string' && win.createdAt
         ? win.createdAt
         : inferCreatedAt(win.id, new Date().toISOString()),
+    imageUri: normalizeImageUri(win.imageUri),
   };
+};
+
+const normalizeJournalAnalysis = (analysis: unknown): JournalAnalysis | undefined => {
+  if (!analysis || typeof analysis !== 'object') return undefined;
+
+  const value = analysis as Partial<JournalAnalysis>;
+  const feeling = typeof value.feeling === 'string' ? value.feeling : undefined;
+  const feedback = typeof value.feedback === 'string' ? value.feedback : undefined;
+  const question = typeof value.question === 'string' ? value.question : undefined;
+  const raw = typeof value.raw === 'string' ? value.raw : '';
+  const parsed = Boolean(value.parsed);
+
+  if (!feeling && !feedback && !question && !raw) {
+    return undefined;
+  }
+
+  return {
+    feeling,
+    feedback,
+    question,
+    raw,
+    parsed,
+  };
+};
+
+const normalizeJournalEntry = (entry: Partial<JournalEntry>): JournalEntry | null => {
+  if (
+    typeof entry.id !== 'string' ||
+    typeof entry.createdAt !== 'string' ||
+    typeof entry.dateLabel !== 'string' ||
+    typeof entry.entry !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    id: entry.id,
+    createdAt: entry.createdAt,
+    dateLabel: entry.dateLabel,
+    mood: typeof entry.mood === 'string' ? entry.mood : undefined,
+    entry: entry.entry,
+    analysis: normalizeJournalAnalysis(entry.analysis),
+    imageUri: normalizeImageUri(entry.imageUri),
+  };
+};
+
+const preserveLocalImageUris = <T extends { id: string; imageUri?: string }>(
+  primary: T[],
+  localFallback: T[]
+) => {
+  const localImageUris = new Map(
+    localFallback
+      .map((item) => {
+        const imageUri = normalizeImageUri(item.imageUri);
+        return imageUri ? ([item.id, imageUri] as const) : null;
+      })
+      .filter((entry): entry is readonly [string, string] => entry !== null)
+  );
+
+  return primary.map((item) => {
+    const imageUri = normalizeImageUri(item.imageUri) ?? localImageUris.get(item.id);
+    return imageUri ? { ...item, imageUri } : item;
+  });
 };
 
 const sortWins = (wins: Win[]) =>
@@ -103,6 +172,10 @@ const sortEntries = (entries: JournalEntry[]) =>
 
 const ensureSettingsDefaults = (bundle: Partial<UserSettingsBundle>): UserSettingsBundle => ({
   userName: bundle.userName?.trim() ?? '',
+  profileImageUri:
+    typeof bundle.profileImageUri === 'string' && bundle.profileImageUri.trim()
+      ? bundle.profileImageUri.trim()
+      : null,
   dailyGoal: normalizeGoal(bundle.dailyGoal ?? DEFAULT_DAILY_GOAL),
   dailyIntention: bundle.dailyIntention ?? '',
   achievements: normalizeAchievementList(bundle.achievements),
@@ -122,6 +195,7 @@ const toDataError = (error: PostgrestError, entity: string) => {
 
 const hasWinsData = (bundle: WinsBundle) =>
   bundle.wins.length > 0 ||
+  Boolean(bundle.profileImageUri) ||
   bundle.dailyIntention.trim().length > 0 ||
   bundle.dailyGoal !== DEFAULT_DAILY_GOAL ||
   bundle.achievements.some((achievement) => achievement.unlockedAt);
@@ -132,6 +206,7 @@ const hasJournalData = (bundle: JournalBundle) =>
 const loadSettingsMap = async (userId?: string | null) => {
   const entries = await safeAsyncStorage.multiGet([
     scopeKey(STORAGE_KEYS.userName, userId),
+    scopeKey(STORAGE_KEYS.profileImageUri, userId),
     scopeKey(STORAGE_KEYS.dailyGoal, userId),
     scopeKey(STORAGE_KEYS.dailyIntention, userId),
     scopeKey(STORAGE_KEYS.achievements, userId),
@@ -152,6 +227,7 @@ export async function loadLocalWinsBundle(userId?: string | null): Promise<WinsB
   return {
     ...ensureSettingsDefaults({
       userName: settingsMap.get(scopeKey(STORAGE_KEYS.userName, userId)) ?? '',
+      profileImageUri: settingsMap.get(scopeKey(STORAGE_KEYS.profileImageUri, userId)) ?? null,
       dailyGoal: Number.parseInt(
         settingsMap.get(scopeKey(STORAGE_KEYS.dailyGoal, userId)) ?? '',
         10
@@ -170,6 +246,7 @@ export async function saveLocalWinsBundle(bundle: WinsBundle, userId?: string | 
   await safeAsyncStorage.multiSet([
     [scopeKey(STORAGE_KEYS.wins, userId), JSON.stringify(sortWins(bundle.wins))],
     [scopeKey(STORAGE_KEYS.userName, userId), bundle.userName],
+    [scopeKey(STORAGE_KEYS.profileImageUri, userId), bundle.profileImageUri ?? ''],
     [scopeKey(STORAGE_KEYS.dailyGoal, userId), String(normalizeGoal(bundle.dailyGoal))],
     [scopeKey(STORAGE_KEYS.dailyIntention, userId), bundle.dailyIntention],
     [scopeKey(STORAGE_KEYS.achievements, userId), JSON.stringify(bundle.achievements)],
@@ -182,7 +259,9 @@ export async function loadLocalJournalBundle(userId?: string | null): Promise<Jo
     safeAsyncStorage.getItem(scopeKey(STORAGE_KEYS.dailyMood, userId)),
   ]);
 
-  const entries = sortEntries(parseJson<JournalEntry[]>(entriesText, []));
+  const entries = sortEntries(
+    parseJson<JournalEntry[]>(entriesText, []).map(normalizeJournalEntry).filter(Boolean) as JournalEntry[]
+  );
   const dailyMoods = parseJson<DailyMoodMap>(moodText, {});
 
   return {
@@ -235,6 +314,7 @@ export async function loadRemoteWinsBundle(userId: string): Promise<Partial<Wins
 
   return {
     userName: settingsResult.data?.username ?? '',
+    profileImageUri: null,
     dailyGoal: normalizeGoal(settingsResult.data?.daily_goal ?? DEFAULT_DAILY_GOAL),
     dailyIntention: settingsResult.data?.daily_intention ?? '',
     achievements: normalizeAchievementList(settingsResult.data?.achievements),
@@ -405,6 +485,14 @@ export async function replaceRemoteDailyMoods(userId: string, dailyMoods: DailyM
     throw toDataError(error, 'daily_moods');
   }
 }
+
+export const mergeWinsWithLocalImages = (wins: Win[], localWins: Win[]) =>
+  preserveLocalImageUris(wins, localWins);
+
+export const mergeJournalEntriesWithLocalImages = (
+  entries: JournalEntry[],
+  localEntries: JournalEntry[]
+) => preserveLocalImageUris(entries, localEntries);
 
 export const userBundleHasMeaningfulData = hasWinsData;
 export const journalBundleHasMeaningfulData = hasJournalData;

@@ -81,36 +81,44 @@ export function useReminder() {
   }, []);
 
   const toggleReminder = useCallback(async (nextValue: boolean) => {
-    const Notifications = await getNotifications();
-    if (!Notifications) {
-      Alert.alert(
-        'Reminders Unavailable',
-        'Daily reminders need a development build (not Expo Go).'
-      );
-      return false;
-    }
-
-    if (nextValue) {
-      const granted = await requestPermissions(Notifications);
-      if (!granted) {
-        Alert.alert('Notifications Disabled', 'Enable notifications to receive daily reminders.');
+    setLoading(true);
+    try {
+      const Notifications = await getNotifications();
+      if (!Notifications) {
+        Alert.alert(
+          'Reminders Unavailable',
+          'Daily reminders need a development build (not Expo Go).'
+        );
         return false;
       }
-      const reminderId = await scheduleReminder(Notifications);
-      await safeAsyncStorage.setItem(REMINDER_ID_KEY, reminderId);
-      await safeAsyncStorage.setItem(REMINDER_ENABLED_KEY, 'true');
-      setEnabled(true);
-      return true;
-    }
 
-    const existingId = await safeAsyncStorage.getItem(REMINDER_ID_KEY);
-    if (existingId) {
-      await Notifications.cancelScheduledNotificationAsync(existingId);
+      if (nextValue) {
+        const granted = await requestPermissions(Notifications);
+        if (!granted) {
+          Alert.alert(
+            'Notifications Disabled',
+            'Enable notifications to receive daily reminders.'
+          );
+          return false;
+        }
+        const reminderId = await scheduleReminder(Notifications);
+        await safeAsyncStorage.setItem(REMINDER_ID_KEY, reminderId);
+        await safeAsyncStorage.setItem(REMINDER_ENABLED_KEY, 'true');
+        setEnabled(true);
+        return true;
+      }
+
+      const existingId = await safeAsyncStorage.getItem(REMINDER_ID_KEY);
+      if (existingId) {
+        await Notifications.cancelScheduledNotificationAsync(existingId);
+      }
+      await safeAsyncStorage.removeItem(REMINDER_ID_KEY);
+      await safeAsyncStorage.removeItem(REMINDER_ENABLED_KEY);
+      setEnabled(false);
+      return true;
+    } finally {
+      setLoading(false);
     }
-    await safeAsyncStorage.removeItem(REMINDER_ID_KEY);
-    await safeAsyncStorage.removeItem(REMINDER_ENABLED_KEY);
-    setEnabled(false);
-    return true;
   }, []);
 
   return {

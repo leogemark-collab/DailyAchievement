@@ -49,11 +49,8 @@ function RootLayoutContent() {
           >
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="dashboard" options={{ title: 'Today' }} />
-            <Stack.Screen name="wins" options={{ title: 'Moments' }} />
-            <Stack.Screen name="calendar" options={{ title: 'Flow Calendar' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="ai" options={{ title: `${BRAND_NAME} Reflect` }} />
-            <Stack.Screen name="profile" options={{ title: 'Profile' }} />
           </Stack>
           <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={theme.colors.background} />
         </WinsProvider>

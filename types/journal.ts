@@ -13,6 +13,7 @@ export type JournalEntry = {
   mood?: string;
   entry: string;
   analysis?: JournalAnalysis;
+  imageUri?: string;
 };
 
 export type DailyMoodEntry = {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,6 +12,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 
 import { PrimaryButton } from '@/components/primary-button';
@@ -27,6 +30,7 @@ import {
   loadLegacyStoredUserName,
   loadLocalJournalBundle,
   loadRemoteJournalBundle,
+  mergeJournalEntriesWithLocalImages,
   replaceRemoteDailyMoods,
   replaceRemoteJournalEntries,
   saveLocalJournalBundle,
@@ -298,6 +302,8 @@ export default function AiCoachScreen() {
   const [selectedMoodKey, setSelectedMoodKey] = useState(MOOD_OPTIONS[2].key);
   const [moodStatus, setMoodStatus] = useState('');
   const [journalText, setJournalText] = useState('');
+  const [journalImageUri, setJournalImageUri] = useState<string | null>(null);
+  const [isPickingJournalImage, setIsPickingJournalImage] = useState(false);
   const [analysis, setAnalysis] = useState<JournalAnalysis | null>(null);
   const [saveNotice, setSaveNotice] = useState('');
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -386,13 +392,18 @@ export default function AiCoachScreen() {
 
           nextBundle = migrationSource;
 
-          if (journalBundleHasMeaningfulData(migrationSource)) {
-            await replaceRemoteJournalEntries(activeUserId, migrationSource.entries);
-            await replaceRemoteDailyMoods(activeUserId, migrationSource.dailyMoods);
-          }
+        if (journalBundleHasMeaningfulData(migrationSource)) {
+          await replaceRemoteJournalEntries(activeUserId, migrationSource.entries);
+          await replaceRemoteDailyMoods(activeUserId, migrationSource.dailyMoods);
         }
+      }
 
-        await saveLocalJournalBundle(nextBundle, activeUserId);
+      nextBundle = {
+        ...nextBundle,
+        entries: mergeJournalEntriesWithLocalImages(nextBundle.entries, scopedLocalBundle.entries),
+      };
+
+      await saveLocalJournalBundle(nextBundle, activeUserId);
 
         if (!isMounted) return;
         applyBundle(nextBundle.entries, nextBundle.dailyMoods);
@@ -463,6 +474,7 @@ export default function AiCoachScreen() {
 
   const handleLoadEntry = (entry: JournalEntry) => {
     setJournalText(entry.entry);
+    setJournalImageUri(entry.imageUri ?? null);
     setAnalysis(entry.analysis ?? null);
     setSaveNotice('');
   };
@@ -492,9 +504,83 @@ export default function AiCoachScreen() {
     }
   };
 
-  const handleSaveMood = () => {
-    if (!selectedMood) return;
-    saveMood(selectedMood);
+  const handlePickJournalImage = async () => {
+    if (isPickingJournalImage) return;
+
+    try {
+      setIsPickingJournalImage(true);
+
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Photos permission needed',
+          'Allow photo access so you can attach a picture to this journal entry.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const selectedAsset = result.assets?.[0];
+      if (selectedAsset?.uri) {
+        setJournalImageUri(selectedAsset.uri);
+        setSaveNotice('');
+      }
+    } catch (error) {
+      console.warn('Failed to pick journal image:', (error as Error).message);
+      Alert.alert('Could not attach photo', 'Try choosing a different image.');
+    } finally {
+      setIsPickingJournalImage(false);
+    }
+  };
+
+  const handleTakeJournalPhoto = async () => {
+    if (isPickingJournalImage) return;
+
+    try {
+      setIsPickingJournalImage(true);
+
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Camera permission needed',
+          'Allow camera access so you can take a picture for this journal entry.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const selectedAsset = result.assets?.[0];
+      if (selectedAsset?.uri) {
+        setJournalImageUri(selectedAsset.uri);
+        setSaveNotice('');
+      }
+    } catch (error) {
+      console.warn('Failed to take journal photo:', (error as Error).message);
+      Alert.alert('Could not open camera', 'Try again or choose a photo instead.');
+    } finally {
+      setIsPickingJournalImage(false);
+    }
+  };
+
+  const handleRemoveJournalImage = () => {
+    setJournalImageUri(null);
+    setSaveNotice('');
   };
 
   const saveEntry = (entryText: string, entryAnalysis?: JournalAnalysis | null) => {
@@ -508,6 +594,7 @@ export default function AiCoachScreen() {
       mood: selectedMood?.label,
       entry: trimmedEntry,
       analysis: entryAnalysis ?? undefined,
+      imageUri: journalImageUri ?? undefined,
     };
 
     setJournalEntries((prev) => {
@@ -518,6 +605,9 @@ export default function AiCoachScreen() {
 
   const handleSaveEntry = () => {
     saveEntry(journalText, null);
+    setJournalText('');
+    setJournalImageUri(null);
+    setAnalysis(null);
     setSaveNotice('Entry saved to your journal.');
     triggerSuccessHaptic();
   };
@@ -563,7 +653,10 @@ export default function AiCoachScreen() {
 
       setAnalysis(parsedAnalysis);
       saveEntry(journalText, parsedAnalysis);
+      setJournalText('');
+      setJournalImageUri(null);
       setSaveNotice('Entry saved to your journal.');
+      triggerSuccessHaptic();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -632,59 +725,58 @@ export default function AiCoachScreen() {
               </View>
             </View>
             <Text style={[styles.title, { color: theme.colors.text }]}>Dayflow Reflection</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
               Slow down, write honestly, and receive a gentle reflection in return.
             </Text>
           </View>
 
-        <View
-          style={[
-            styles.moodCard,
-            { backgroundColor: moodTheme.bg, borderColor: theme.colors.border },
-            theme.shadows.card,
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <Ionicons name="heart-outline" size={18} color={moodTheme.text} />
+          <View
+            style={[
+              styles.moodCard,
+              { backgroundColor: moodTheme.bg, borderColor: theme.colors.border },
+              theme.shadows.card,
+            ]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="heart-outline" size={18} color={moodTheme.text} />
                 <Text style={[styles.cardTitle, { color: moodTheme.text }]}>Mood check-in</Text>
+              </View>
+              <Text style={[styles.cardSubtitle, { color: moodTheme.text }]}>
+                Tap a dot to save the tone for your reflection.
+              </Text>
             </View>
-            <Text style={[styles.cardSubtitle, { color: moodTheme.text }]}>
-              Tap a dot to set the tone for your reflection.
+            <View style={[styles.moodFace, { backgroundColor: moodTheme.face }]}>
+              <Text style={styles.moodEmoji}>{selectedMood?.emoji ?? '\u{1F610}'}</Text>
+            </View>
+            <Text style={[styles.moodLabel, { color: moodTheme.text }]}>
+              {`I'm feeling ${selectedMood?.label ?? 'Neutral'}`}
             </Text>
+            <View style={styles.moodTrack}>
+              <View style={[styles.moodTrackLine, { backgroundColor: moodTheme.track }]} />
+              {MOOD_OPTIONS.map((option) => {
+                const isActive = option.key === selectedMoodKey;
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => handleSelectMood(option.key)}
+                    style={[
+                      styles.moodDot,
+                      {
+                        backgroundColor: isActive ? moodTheme.track : theme.colors.surface,
+                        borderColor: isActive ? moodTheme.track : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    {isActive ? <View style={styles.moodDotInner} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            {moodStatus ? (
+              <Text style={[styles.statusText, { color: moodTheme.text }]}>{moodStatus}</Text>
+            ) : null}
           </View>
-          <View style={[styles.moodFace, { backgroundColor: moodTheme.face }]}>
-            <Text style={styles.moodEmoji}>{selectedMood?.emoji ?? '\u{1F610}'}</Text>
-          </View>
-          <Text style={[styles.moodLabel, { color: moodTheme.text }]}>
-            {`I'm feeling ${selectedMood?.label ?? 'Neutral'}`}
-          </Text>
-          <View style={styles.moodTrack}>
-            <View style={[styles.moodTrackLine, { backgroundColor: moodTheme.track }]} />
-            {MOOD_OPTIONS.map((option) => {
-              const isActive = option.key === selectedMoodKey;
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => handleSelectMood(option.key)}
-                  style={[
-                    styles.moodDot,
-                    {
-                      backgroundColor: isActive ? moodTheme.track : theme.colors.surface,
-                      borderColor: isActive ? moodTheme.track : theme.colors.border,
-                    },
-                  ]}
-                >
-                  {isActive ? <View style={styles.moodDotInner} /> : null}
-                </Pressable>
-              );
-            })}
-          </View>
-          <PrimaryButton label="Save Mood" onPress={handleSaveMood} />
-          {moodStatus ? (
-            <Text style={[styles.statusText, { color: moodTheme.text }]}>{moodStatus}</Text>
-          ) : null}
-        </View>
 
           <View
             style={[
@@ -706,6 +798,7 @@ export default function AiCoachScreen() {
               value={journalText}
               onChangeText={(value) => {
                 setJournalText(value);
+                setAnalysis(null);
                 setSaveNotice('');
               }}
               placeholder="Write about your day, your pressure, or the one thing that mattered..."
@@ -722,6 +815,87 @@ export default function AiCoachScreen() {
               multiline
               textAlignVertical="top"
             />
+            <View style={styles.attachmentSection}>
+              <View style={styles.attachmentActionRow}>
+                <Pressable
+                  onPress={handlePickJournalImage}
+                  disabled={isPickingJournalImage}
+                  style={[
+                    styles.attachmentButton,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Ionicons name="image-outline" size={16} color={theme.colors.accent} />
+                  <Text style={[styles.attachmentButtonText, { color: theme.colors.text }]}>
+                    {isPickingJournalImage
+                      ? 'Opening...'
+                      : journalImageUri
+                        ? 'Change photo'
+                        : 'Add photo'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleTakeJournalPhoto}
+                  disabled={isPickingJournalImage}
+                  style={[
+                    styles.attachmentButton,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                      opacity: isPickingJournalImage ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="camera-outline" size={16} color={theme.colors.accent} />
+                  <Text style={[styles.attachmentButtonText, { color: theme.colors.text }]}>
+                    {isPickingJournalImage ? 'Opening...' : 'Take photo'}
+                  </Text>
+                </Pressable>
+                {journalImageUri ? (
+                  <Pressable
+                    onPress={handleRemoveJournalImage}
+                    style={[
+                      styles.attachmentRemoveButton,
+                      {
+                        backgroundColor: theme.colors.surfaceAlt,
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.attachmentRemoveText, { color: theme.colors.textMuted }]}>
+                      Remove
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {journalImageUri ? (
+                <View
+                  style={[
+                    styles.attachmentPreview,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={journalImageUri}
+                    style={styles.attachmentImage}
+                    contentFit="cover"
+                  />
+                  <Text style={[styles.attachmentCaption, { color: theme.colors.textMuted }]}>
+                    Photo will be saved with this reflection.
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.attachmentHint, { color: theme.colors.textMuted }]}>
+                  Optional: add a photo that matches this reflection.
+                </Text>
+              )}
+            </View>
             <PrimaryButton
               label={loading ? 'Reflecting...' : 'Reflect & Save'}
               onPress={handleGenerate}
@@ -894,6 +1068,9 @@ export default function AiCoachScreen() {
                       <Text style={[styles.entryMood, { color: theme.colors.text }]}>
                         Mood: {entry.mood}
                       </Text>
+                    ) : null}
+                    {entry.imageUri ? (
+                      <Image source={entry.imageUri} style={styles.entryImage} contentFit="cover" />
                     ) : null}
                     <Text
                       style={[styles.entryText, { color: theme.colors.text }]}
@@ -1152,6 +1329,59 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: WinsTheme.fonts.body,
   },
+  attachmentSection: {
+    gap: WinsTheme.spacing.sm,
+  },
+  attachmentActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: WinsTheme.spacing.sm,
+  },
+  attachmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: WinsTheme.radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  attachmentButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  attachmentRemoveButton: {
+    borderRadius: WinsTheme.radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  attachmentRemoveText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: WinsTheme.fonts.body,
+  },
+  attachmentPreview: {
+    borderWidth: 1,
+    borderRadius: WinsTheme.radius.md,
+    padding: WinsTheme.spacing.sm,
+    gap: WinsTheme.spacing.sm,
+  },
+  attachmentImage: {
+    width: '100%',
+    height: 176,
+    borderRadius: WinsTheme.radius.md,
+  },
+  attachmentCaption: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  attachmentHint: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
   helperText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
@@ -1201,6 +1431,11 @@ const styles = StyleSheet.create({
     padding: WinsTheme.spacing.md,
     borderWidth: 1,
     gap: 6,
+  },
+  entryImage: {
+    width: '100%',
+    height: 132,
+    borderRadius: WinsTheme.radius.md,
   },
   cardPressed: {
     opacity: 0.85,

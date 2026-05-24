@@ -7,6 +7,7 @@ export type Win = {
   dayKey?: string;
   category: WinCategory;
   createdAt?: string;
+  imageUri?: string;
 };
 
 export type Achievement = {

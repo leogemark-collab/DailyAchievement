@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '@/components/screen-container';
 import { BRAND_DAILY_PROMPT, BRAND_NAME, BRAND_TAGLINE } from '@/constants/brand';
@@ -8,10 +9,9 @@ import { WinsTheme } from '@/constants/wins-theme';
 import { getAuthDisplayName, useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
-import { useTypedNavigation } from '@/navigation/typed-navigation';
 
 export default function SplashScreen() {
-  const navigation = useTypedNavigation();
+  const router = useRouter();
   const { isDark } = useTheme();
   const { isReady, session, user, isConfigured } = useAuth();
   const { setUserName } = useWins();
@@ -38,15 +38,15 @@ export default function SplashScreen() {
       if (isConfigured && session?.user) {
         const username = getAuthDisplayName(user) || 'Friend';
         setUserName(username);
-        navigation.navigate('dashboard', { name: username });
+        router.replace('/dashboard');
         return;
       }
 
-      navigation.navigate('login');
+      router.replace('/login');
     }, 1600);
 
     return () => clearTimeout(timer);
-  }, [isConfigured, isReady, navigation, session, setUserName, user]);
+  }, [isConfigured, isReady, router, session, setUserName, user]);
 
   return (
     <ScreenContainer>

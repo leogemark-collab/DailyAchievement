@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
 import { ScreenContainer } from '@/components/screen-container';
 import { getCategoryMeta } from '@/constants/win-categories';
@@ -16,6 +18,7 @@ import {
   loadLegacyStoredUserName,
   loadLocalJournalBundle,
   loadRemoteJournalBundle,
+  mergeJournalEntriesWithLocalImages,
   replaceRemoteDailyMoods,
   replaceRemoteJournalEntries,
   saveLocalJournalBundle,
@@ -36,6 +39,7 @@ const formatLongDate = (date: Date) =>
   });
 
 export default function CalendarScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const { winsByDay, userName } = useWins();
   const { user, isConfigured } = useAuth();
   const { isDark } = useTheme();
@@ -79,6 +83,11 @@ export default function CalendarScreen() {
           await replaceRemoteDailyMoods(activeUserId, migrationSource.dailyMoods);
         }
       }
+
+      nextBundle = {
+        ...nextBundle,
+        entries: mergeJournalEntriesWithLocalImages(nextBundle.entries, scopedLocalBundle.entries),
+      };
 
       await saveLocalJournalBundle(nextBundle, activeUserId);
       setJournalEntries(nextBundle.entries);
@@ -191,7 +200,13 @@ export default function CalendarScreen() {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: tabBarHeight + WinsTheme.spacing.xl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View
           style={[
             styles.headerCard,
@@ -396,6 +411,9 @@ export default function CalendarScreen() {
                       ]}
                     >
                       <Text style={[styles.winText, { color: theme.colors.text }]}>{win.text}</Text>
+                      {win.imageUri ? (
+                        <Image source={win.imageUri} style={styles.entryImage} contentFit="cover" />
+                      ) : null}
                       <Text style={[styles.winMeta, { color: theme.colors.textMuted }]}>
                         {category.emoji} {category.label}
                       </Text>
@@ -426,6 +444,9 @@ export default function CalendarScreen() {
                       <Text style={[styles.journalMood, { color: theme.colors.text }]}>
                         {`Mood: ${entry.mood}`}
                       </Text>
+                    ) : null}
+                    {entry.imageUri ? (
+                      <Image source={entry.imageUri} style={styles.entryImage} contentFit="cover" />
                     ) : null}
                     <Text
                       style={[styles.journalText, { color: theme.colors.text }]}
@@ -611,6 +632,11 @@ const styles = StyleSheet.create({
     borderRadius: WinsTheme.radius.md,
     padding: WinsTheme.spacing.md,
     gap: 6,
+  },
+  entryImage: {
+    width: '100%',
+    height: 148,
+    borderRadius: WinsTheme.radius.md,
   },
   winText: {
     fontSize: 14,
