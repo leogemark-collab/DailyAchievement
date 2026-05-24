@@ -1,10 +1,14 @@
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as Sharing from "expo-sharing";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  PixelRatio,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,15 +16,19 @@ import {
   Text,
   View,
 } from "react-native";
+import { captureRef, releaseCapture } from "react-native-view-shot";
 
 import { PrimaryButton } from "@/components/primary-button";
+import { ProgressShareCard } from "@/components/progress-share-card";
 import { ScreenContainer } from "@/components/screen-container";
+import { BRAND_NAME } from "@/constants/brand";
 import { getTheme } from "@/constants/theme-utils";
 import { WinsTheme } from "@/constants/wins-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useReminder } from "@/hooks/use-reminder";
 import { useTheme } from "@/hooks/use-theme";
 import { useWins } from "@/hooks/use-wins";
+import type { Win } from "@/types/win";
 import {
   replaceRemoteDailyMoods,
   replaceRemoteJournalEntries,
@@ -37,6 +45,11 @@ const SECTION_OPTIONS = [
   { key: "milestones", label: "Milestones" },
   { key: "settings", label: "Settings" },
 ] as const;
+
+const STORY_CARD_PIXEL_WIDTH = 1080;
+const STORY_CARD_PIXEL_HEIGHT = 1920;
+const SHARE_QUOTE_MAX_LENGTH = 140;
+const SHARE_QUOTE_FALLBACK = "I'm building momentum one small win at a time.";
 
 type ProfileSectionKey = (typeof SECTION_OPTIONS)[number]["key"];
 
@@ -67,6 +80,80 @@ function MetricCard({ label, value, theme }: MetricCardProps) {
   );
 }
 
+const fromDayKey = (dayKey: string) => {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+};
+
+const getWinDate = (win: Win) => {
+  if (win.createdAt) {
+    const createdAtDate = new Date(win.createdAt);
+    if (!Number.isNaN(createdAtDate.getTime())) {
+      return createdAtDate;
+    }
+  }
+
+  if (win.dayKey) {
+    return fromDayKey(win.dayKey);
+  }
+
+  const parsedDate = new Date(win.date);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const getRollingWeekStart = (now: Date) => {
+  const weekStart = new Date(now);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - 6);
+  return weekStart;
+};
+
+const truncateShareQuote = (quote: string) => {
+  const normalized = quote.replace(/\s+/g, " ").trim();
+  if (normalized.length <= SHARE_QUOTE_MAX_LENGTH) {
+    return normalized;
+  }
+
+  const clipped = normalized.slice(0, SHARE_QUOTE_MAX_LENGTH - 3);
+  const lastWordBreak = clipped.lastIndexOf(" ");
+  const trimmed =
+    lastWordBreak > 90 ? clipped.slice(0, lastWordBreak) : clipped;
+
+  return `${trimmed.trimEnd()}...`;
+};
+
+const waitForNextFrame = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+const downloadShareCardOnWeb = (dataUri: string, fileName: string) => {
+  const documentRef = globalThis.document;
+  if (!documentRef?.body) {
+    return false;
+  }
+
+  const anchor = documentRef.createElement("a");
+  anchor.href = dataUri;
+  anchor.download = fileName;
+  documentRef.body.appendChild(anchor);
+  anchor.click();
+  documentRef.body.removeChild(anchor);
+  return true;
+};
+
+const buildShareCardFileName = (name: string) => {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `${slug || "small-wins"}-story-card.png`;
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
@@ -79,6 +166,7 @@ export default function ProfileScreen() {
     achievements,
     dailyGoal,
     setUserName,
+    wins,
   } = useWins();
   const { signOut, isConfigured, user } = useAuth();
   const { isDark, toggleTheme } = useTheme();
@@ -93,9 +181,19 @@ export default function ProfileScreen() {
     useState<ProfileSectionKey>("overview");
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isResettingProgress, setIsResettingProgress] = useState(false);
+  const [isSharingCard, setIsSharingCard] = useState(false);
   const name = userName || "Friend";
   const profileInitial = name.slice(0, 1).toUpperCase();
   const activeUserId = isConfigured ? user?.id ?? null : null;
+  const shareCardCaptureRef = useRef<View | null>(null);
+  const previousShareUriRef = useRef<string | null>(null);
+  const shareCardSize = useMemo(() => {
+    const pixelRatio = PixelRatio.get();
+    return {
+      logicalWidth: STORY_CARD_PIXEL_WIDTH / pixelRatio,
+      logicalHeight: STORY_CARD_PIXEL_HEIGHT / pixelRatio,
+    };
+  }, []);
 
   const unlockedAchievements = achievements.filter((a) => a.unlockedAt);
   const lockedCount = achievements.length - unlockedAchievements.length;
@@ -110,6 +208,48 @@ export default function ProfileScreen() {
       : stats.totalWins > 0
         ? `Wins ${stats.totalWins}`
         : "New start";
+  const bestWeeklyWin = useMemo(() => {
+    const weekStart = getRollingWeekStart(new Date());
+
+    const weeklyWins = wins.filter((win) => {
+      const sourceDate = getWinDate(win);
+      return sourceDate !== null && sourceDate >= weekStart;
+    });
+
+    if (weeklyWins.length === 0) {
+      return null;
+    }
+
+    return [...weeklyWins].sort((left, right) => {
+      if (right.text.length !== left.text.length) {
+        return right.text.length - left.text.length;
+      }
+
+      const leftTime = getWinDate(left)?.getTime() ?? 0;
+      const rightTime = getWinDate(right)?.getTime() ?? 0;
+      return rightTime - leftTime;
+    })[0];
+  }, [wins]);
+  const shareQuote = bestWeeklyWin?.text?.trim()
+    ? truncateShareQuote(bestWeeklyWin.text)
+    : SHARE_QUOTE_FALLBACK;
+  const shareQuoteLabel = bestWeeklyWin ? "Best win this week" : "Keep going";
+  const shareHandle = `@${
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "") || "friend"
+  }`;
+  const shareActionLabel =
+    Platform.OS === "web" ? "Download story card" : "Share to Stories";
+
+  useEffect(() => {
+    return () => {
+      if (previousShareUriRef.current) {
+        releaseCapture(previousShareUriRef.current);
+      }
+    };
+  }, []);
 
   const handleSignOut = async () => {
     if (!isConfigured) return;
@@ -250,7 +390,78 @@ export default function ProfileScreen() {
     );
   };
 
-  const renderOverview = () => (
+  const handleShareCard = async () => {
+    if (isSharingCard || !shareCardCaptureRef.current) return;
+
+    try {
+      setIsSharingCard(true);
+
+      await waitForNextFrame();
+      await waitForNextFrame();
+
+      if (previousShareUriRef.current) {
+        releaseCapture(previousShareUriRef.current);
+        previousShareUriRef.current = null;
+      }
+
+      if (Platform.OS === "web") {
+        const dataUri = await captureRef(shareCardCaptureRef.current, {
+          format: "png",
+          quality: 1,
+          result: "data-uri",
+          width: STORY_CARD_PIXEL_WIDTH,
+          height: STORY_CARD_PIXEL_HEIGHT,
+        });
+
+        const didDownload = downloadShareCardOnWeb(
+          dataUri,
+          buildShareCardFileName(name),
+        );
+
+        if (!didDownload) {
+          throw new Error("Browser download is unavailable.");
+        }
+
+        return;
+      }
+
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (!isSharingAvailable) {
+        Alert.alert(
+          "Sharing unavailable",
+          "Sharing is not available on this device right now.",
+        );
+        return;
+      }
+
+      const uri = await captureRef(shareCardCaptureRef.current, {
+        format: "png",
+        quality: 1,
+        result: "tmpfile",
+        width: STORY_CARD_PIXEL_WIDTH,
+        height: STORY_CARD_PIXEL_HEIGHT,
+      });
+      previousShareUriRef.current = uri;
+
+      await Sharing.shareAsync(uri, {
+        mimeType: "image/png",
+        dialogTitle: `Share your ${BRAND_NAME} story card`,
+        UTI: "public.png",
+      });
+    } catch (error) {
+      console.warn("Failed to share progress card:", (error as Error).message);
+      Alert.alert(
+        "Could not share card",
+        Platform.OS === "web"
+          ? "Try again in a moment. Some browsers block automatic downloads from preview builds."
+          : "Try again in a moment. You can also take a screenshot of the preview.",
+      );
+    } finally {
+      setIsSharingCard(false);
+    }
+  };
+
+  const renderShareCardSection = () => (
     <View
       style={[
         styles.sectionCard,
@@ -261,87 +472,164 @@ export default function ProfileScreen() {
         theme.shadows.card,
       ]}
     >
-      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-        Weekly rhythm
-      </Text>
-      <View style={styles.chartRow}>
-        {stats.weeklyCounts.map((item) => {
-          const height = 16 + (item.count / maxWeekly) * 56;
-          return (
-            <View key={item.date} style={styles.chartColumn}>
-              <View
-                style={[
-                  styles.chartBar,
-                  {
-                    height,
-                    backgroundColor:
-                      item.count > 0
-                        ? theme.colors.accent
-                        : theme.colors.border,
-                  },
-                ]}
-              />
-              <Text
-                style={[styles.chartLabel, { color: theme.colors.textMuted }]}
-              >
-                {item.label}
-              </Text>
-              <Text style={[styles.chartValue, { color: theme.colors.text }]}>
-                {item.count}
-              </Text>
-            </View>
-          );
-        })}
+      <View style={styles.shareSectionHeader}>
+        <View style={styles.shareSectionCopy}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Share your progress
+          </Text>
+          <Text
+            style={[styles.sectionSubtitle, { color: theme.colors.textMuted }]}
+          >
+            Clean 1080 x 1920 story card with your streak, total wins, and your
+            strongest line from this week.
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.shareHintBadge,
+            {
+              backgroundColor: theme.colors.accentSoft,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.shareHintBadgeText, { color: theme.colors.accent }]}
+          >
+            Stories
+          </Text>
+        </View>
       </View>
 
-      <View
-        style={[styles.divider, { backgroundColor: theme.colors.border }]}
-      />
-
-      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-        Recent streaks
+      <View style={styles.sharePreviewShell}>
+        <ProgressShareCard
+          currentStreak={stats.currentStreak}
+          handle={shareHandle}
+          quote={shareQuote}
+          quoteLabel={shareQuoteLabel}
+          theme={theme}
+          totalWins={stats.totalWins}
+        />
+      </View>
+      <Text style={[styles.sharePreviewCaption, { color: theme.colors.textMuted }]}>
+        Exported at 1080 x 1920 for Instagram Stories and full-screen sharing.
       </Text>
-      {recentStreaks.length === 0 ? (
-        <Text
-          style={[styles.emptyStateText, { color: theme.colors.textMuted }]}
-        >
-          Log wins on consecutive days to build your first streak.
+
+      <PrimaryButton
+        label={isSharingCard ? "Preparing card..." : shareActionLabel}
+        onPress={() => {
+          void handleShareCard();
+        }}
+        disabled={isSharingCard}
+      />
+      {isSharingCard ? (
+        <View style={styles.shareLoadingRow}>
+          <ActivityIndicator color={theme.colors.accent} />
+          <Text style={[styles.shareLoadingText, { color: theme.colors.textMuted }]}>
+            {Platform.OS === "web"
+              ? "Generating your story card..."
+              : "Generating your story card and opening the share sheet..."}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderOverview = () => (
+    <View style={styles.sectionStack}>
+      {renderShareCardSection()}
+      <View
+        style={[
+          styles.sectionCard,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+          },
+          theme.shadows.card,
+        ]}
+      >
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Weekly rhythm
         </Text>
-      ) : (
-        recentStreaks.map((streak, index) => (
-          <View
-            key={`${streak.start}-${index}`}
-            style={styles.streakHistoryRow}
+        <View style={styles.chartRow}>
+          {stats.weeklyCounts.map((item) => {
+            const height = 16 + (item.count / maxWeekly) * 56;
+            return (
+              <View key={item.date} style={styles.chartColumn}>
+                <View
+                  style={[
+                    styles.chartBar,
+                    {
+                      height,
+                      backgroundColor:
+                        item.count > 0
+                          ? theme.colors.accent
+                          : theme.colors.border,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[styles.chartLabel, { color: theme.colors.textMuted }]}
+                >
+                  {item.label}
+                </Text>
+                <Text style={[styles.chartValue, { color: theme.colors.text }]}>
+                  {item.count}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View
+          style={[styles.divider, { backgroundColor: theme.colors.border }]}
+        />
+
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Recent streaks
+        </Text>
+        {recentStreaks.length === 0 ? (
+          <Text
+            style={[styles.emptyStateText, { color: theme.colors.textMuted }]}
           >
-            <View>
+            Log wins on consecutive days to build your first streak.
+          </Text>
+        ) : (
+          recentStreaks.map((streak, index) => (
+            <View
+              key={`${streak.start}-${index}`}
+              style={styles.streakHistoryRow}
+            >
+              <View>
+                <Text
+                  style={[
+                    styles.streakHistoryValue,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  {streak.length} days
+                </Text>
+                <Text
+                  style={[
+                    styles.streakHistoryLabel,
+                    { color: theme.colors.textMuted },
+                  ]}
+                >
+                  {streak.start} - {streak.end}
+                </Text>
+              </View>
               <Text
                 style={[
-                  styles.streakHistoryValue,
-                  { color: theme.colors.text },
+                  styles.streakHistoryEmoji,
+                  { color: theme.colors.accent },
                 ]}
               >
-                {streak.length} days
-              </Text>
-              <Text
-                style={[
-                  styles.streakHistoryLabel,
-                  { color: theme.colors.textMuted },
-                ]}
-              >
-                {streak.start} - {streak.end}
+                {flameIcon}
               </Text>
             </View>
-            <Text
-              style={[
-                styles.streakHistoryEmoji,
-                { color: theme.colors.accent },
-              ]}
-            >
-              {flameIcon}
-            </Text>
-          </View>
-        ))
-      )}
+          ))
+        )}
+      </View>
     </View>
   );
 
@@ -824,6 +1112,29 @@ export default function ProfileScreen() {
         {activeSection === "milestones" ? renderMilestones() : null}
         {activeSection === "settings" ? renderSettings() : null}
       </ScrollView>
+      <View pointerEvents="none" style={styles.shareCaptureRoot}>
+        <View
+          ref={shareCardCaptureRef}
+          collapsable={false}
+          style={[
+            styles.shareCaptureCanvas,
+            {
+              width: shareCardSize.logicalWidth,
+              height: shareCardSize.logicalHeight,
+            },
+          ]}
+        >
+          <ProgressShareCard
+            currentStreak={stats.currentStreak}
+            handle={shareHandle}
+            quote={shareQuote}
+            quoteLabel={shareQuoteLabel}
+            theme={theme}
+            totalWins={stats.totalWins}
+            variant="capture"
+          />
+        </View>
+      </View>
     </ScreenContainer>
   );
 }
@@ -1026,6 +1337,56 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     fontFamily: WinsTheme.fonts.body,
+  },
+  shareSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: WinsTheme.spacing.md,
+  },
+  shareSectionCopy: {
+    flex: 1,
+  },
+  shareHintBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  shareHintBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    fontFamily: WinsTheme.fonts.body,
+  },
+  sharePreviewShell: {
+    width: "100%",
+    maxWidth: 340,
+    alignSelf: "center",
+  },
+  sharePreviewCaption: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    fontFamily: WinsTheme.fonts.body,
+  },
+  shareLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: WinsTheme.spacing.sm,
+  },
+  shareLoadingText: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  shareCaptureRoot: {
+    position: "absolute",
+    top: 0,
+    left: -10000,
+  },
+  shareCaptureCanvas: {
+    backgroundColor: "transparent",
   },
   chartRow: {
     flexDirection: "row",

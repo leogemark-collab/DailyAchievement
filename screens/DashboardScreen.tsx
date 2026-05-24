@@ -9,7 +9,6 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -19,7 +18,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ScreenContainer } from '@/components/screen-container';
-import { BRAND_DAILY_PROMPT, BRAND_NAME } from '@/constants/brand';
+import { BRAND_DAILY_PROMPT } from '@/constants/brand';
 import { getTheme } from '@/constants/theme-utils';
 import { DEFAULT_CATEGORY, WIN_CATEGORIES } from '@/constants/win-categories';
 import { WinsTheme } from '@/constants/wins-theme';
@@ -32,13 +31,9 @@ const greetingForHour = (hour: number) => {
   return 'Good evening';
 };
 
-const flameIcon = '\u{1F525}';
-const starIcon = '\u{2B50}';
-
 export default function DashboardScreen() {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
-  const { width } = useWindowDimensions();
   const { addWin, stats, userName, dailyGoal, setDailyGoal, dailyIntention, setDailyIntention } =
     useWins();
   const { isDark } = useTheme();
@@ -52,16 +47,15 @@ export default function DashboardScreen() {
 
   const name = userName || 'Friend';
   const greeting = greetingForHour(new Date().getHours());
-  const isNarrow = width < 390;
   const remainingWins = Math.max(0, dailyGoal - stats.winsToday);
   const goalProgress = Math.min(1, stats.winsToday / Math.max(1, dailyGoal));
   const percentComplete = Math.round(goalProgress * 100);
   const canAdd = winText.trim().length > 0;
-  const quickStats = [
-    { label: 'Today', value: stats.winsToday.toString() },
-    { label: 'Streak', value: `${stats.currentStreak}${flameIcon}` },
-    { label: 'Best', value: `${stats.bestStreak}${starIcon}` },
-  ];
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 
   useEffect(() => {
     if (intentionSyncRef.current) {
@@ -100,34 +94,23 @@ export default function DashboardScreen() {
 
   const handlePickWinImage = async () => {
     if (isPickingImage) return;
-
     try {
       setIsPickingImage(true);
-
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          'Photos permission needed',
-          'Allow photo access so you can attach a picture to this win.'
-        );
+        Alert.alert('Photos permission needed', 'Allow photo access to attach a picture.');
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-
       if (result.canceled) return;
-
       const selectedAsset = result.assets?.[0];
-      if (selectedAsset?.uri) {
-        setWinImageUri(selectedAsset.uri);
-      }
-    } catch (error) {
-      console.warn('Failed to pick win image:', (error as Error).message);
+      if (selectedAsset?.uri) setWinImageUri(selectedAsset.uri);
+    } catch {
       Alert.alert('Could not attach photo', 'Try choosing a different image.');
     } finally {
       setIsPickingImage(false);
@@ -136,42 +119,27 @@ export default function DashboardScreen() {
 
   const handleTakeWinPhoto = async () => {
     if (isPickingImage) return;
-
     try {
       setIsPickingImage(true);
-
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          'Camera permission needed',
-          'Allow camera access so you can take a picture for this win.'
-        );
+        Alert.alert('Camera permission needed', 'Allow camera access to take a photo.');
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-
       if (result.canceled) return;
-
       const selectedAsset = result.assets?.[0];
-      if (selectedAsset?.uri) {
-        setWinImageUri(selectedAsset.uri);
-      }
-    } catch (error) {
-      console.warn('Failed to take win photo:', (error as Error).message);
+      if (selectedAsset?.uri) setWinImageUri(selectedAsset.uri);
+    } catch {
       Alert.alert('Could not open camera', 'Try again or choose a photo instead.');
     } finally {
       setIsPickingImage(false);
     }
-  };
-
-  const handleRemoveWinImage = () => {
-    setWinImageUri(null);
   };
 
   return (
@@ -181,91 +149,85 @@ export default function DashboardScreen() {
         behavior={Platform.select({ ios: 'padding', android: undefined })}
       >
         <ScrollView
-          contentContainerStyle={[
-            styles.container,
-            {
-              paddingBottom: tabBarHeight + WinsTheme.spacing.lg,
-            },
-          ]}
+          contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 24 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View
-            style={[
-              styles.summaryCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.card,
-            ]}
-          >
-            <View style={styles.summaryTopRow}>
-              <View
-                style={[
-                  styles.brandPill,
-                  { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[styles.brandPillText, { color: theme.colors.accent }]}>
-                  {BRAND_NAME} today
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => router.push('/ai')}
-                style={[
-                  styles.reflectShortcut,
-                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-                ]}
-              >
-                <Ionicons name="sparkles-outline" size={15} color={theme.colors.accent} />
-                <Text style={[styles.reflectShortcutText, { color: theme.colors.text }]}>
-                  Reflect
-                </Text>
-              </Pressable>
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.dateLabel, { color: theme.colors.textSubtle }]}>{today}</Text>
+              <Text style={[styles.greeting, { color: theme.colors.text }]}>
+                {greeting}, {name}.
+              </Text>
+              <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+                {BRAND_DAILY_PROMPT}
+              </Text>
             </View>
-
-            <Text style={[styles.greeting, { color: theme.colors.text }]}>{`${greeting}, ${name}`}</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{BRAND_DAILY_PROMPT}</Text>
-
-            <View
+            <Pressable
+              onPress={() => router.push('/ai')}
               style={[
-                styles.progressTrack,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                styles.reflectBtn,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                },
               ]}
             >
+              <Ionicons name="sparkles-outline" size={18} color={theme.colors.accent} />
+            </Pressable>
+          </View>
+
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            ]}
+          >
+            <View style={styles.progressHeader}>
+              <Text style={[styles.cardLabel, { color: theme.colors.textMuted }]}>
+                Daily progress
+              </Text>
+              <Text style={[styles.progressPct, { color: theme.colors.accent }]}>
+                {percentComplete}%
+              </Text>
+            </View>
+            <View style={[styles.track, { backgroundColor: theme.colors.surfaceAlt }]}>
               <View
                 style={[
-                  styles.progressFill,
-                  { width: `${goalProgress * 100}%`, backgroundColor: theme.colors.accent },
+                  styles.trackFill,
+                  {
+                    width: `${percentComplete}%`,
+                    backgroundColor: theme.colors.accent,
+                  },
                 ]}
               />
             </View>
+            <Text style={[styles.progressSub, { color: theme.colors.textSubtle }]}>
+              {remainingWins === 0
+                ? 'Goal reached today'
+                : `${remainingWins} more win${remainingWins === 1 ? '' : 's'} to go`}
+            </Text>
 
-            <View style={styles.progressRow}>
-              <Text style={[styles.progressMeta, { color: theme.colors.accent }]}>
-                {percentComplete}% done
-              </Text>
-              <Text style={[styles.progressMeta, { color: theme.colors.textMuted }]}>
-                {remainingWins === 0
-                  ? 'Goal reached'
-                  : `${remainingWins} more win${remainingWins === 1 ? '' : 's'} to go`}
-              </Text>
-            </View>
-
-            <View style={styles.quickStatsRow}>
-              {quickStats.map((item) => (
+            <View style={styles.statsRow}>
+              {[
+                { label: 'Today', value: stats.winsToday.toString() },
+                { label: 'Streak', value: stats.currentStreak.toString() },
+                { label: 'Best', value: stats.bestStreak.toString() },
+              ].map((item) => (
                 <View
                   key={item.label}
                   style={[
-                    styles.quickStatCard,
+                    styles.statCell,
                     {
                       backgroundColor: theme.colors.surfaceAlt,
                       borderColor: theme.colors.border,
                     },
                   ]}
                 >
-                  <Text style={[styles.quickStatValue, { color: theme.colors.text }]}>
+                  <Text style={[styles.statValue, { color: theme.colors.text }]}>
                     {item.value}
                   </Text>
-                  <Text style={[styles.quickStatLabel, { color: theme.colors.textMuted }]}>
+                  <Text style={[styles.statLabel, { color: theme.colors.textSubtle }]}>
                     {item.label}
                   </Text>
                 </View>
@@ -275,22 +237,25 @@ export default function DashboardScreen() {
             <View
               style={[
                 styles.intentionRow,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                {
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.border,
+                },
               ]}
             >
-              <Ionicons name="leaf-outline" size={16} color={theme.colors.accent} />
+              <View style={[styles.intentionDot, { backgroundColor: theme.colors.accent }]} />
               <TextInput
                 placeholder="Today's intention"
                 value={intentionInput}
                 onChangeText={setIntentionInput}
                 style={[styles.intentionInput, { color: theme.colors.text }]}
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={theme.colors.textSubtle}
                 selectionColor={theme.colors.accent}
                 maxLength={90}
               />
               {intentionInput ? (
-                <Pressable onPress={handleClearIntention} hitSlop={8}>
-                  <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+                <Pressable onPress={handleClearIntention} hitSlop={10}>
+                  <Ionicons name="close-circle" size={16} color={theme.colors.textSubtle} />
                 </Pressable>
               ) : null}
             </View>
@@ -298,37 +263,16 @@ export default function DashboardScreen() {
 
           <View
             style={[
-              styles.composerCard,
+              styles.card,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.card,
             ]}
           >
-            <View style={styles.composerHeader}>
-              <View>
-                <Text style={[styles.sectionEyebrow, { color: theme.colors.textMuted }]}>
-                  Log a win
-                </Text>
-                <Text style={[styles.composerTitle, { color: theme.colors.text }]}>
-                  What moved forward?
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.categoryCountPill,
-                  { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[styles.categoryCountText, { color: theme.colors.accent }]}>
-                  {canAdd ? 'Ready' : 'Draft'}
-                </Text>
-              </View>
-            </View>
+            <Text style={[styles.cardLabel, { color: theme.colors.textMuted }]}>Log a win</Text>
+            <Text style={[styles.composerTitle, { color: theme.colors.text }]}>
+              What moved forward?
+            </Text>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryRail}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRail}>
               {WIN_CATEGORIES.map((category) => {
                 const isActive = category.key === selectedCategory;
                 return (
@@ -336,17 +280,21 @@ export default function DashboardScreen() {
                     key={category.key}
                     onPress={() => setSelectedCategory(category.key)}
                     style={[
-                      styles.categoryChip,
+                      styles.chip,
                       {
-                        backgroundColor: isActive ? theme.colors.accent : theme.colors.surfaceAlt,
+                        backgroundColor: isActive
+                          ? theme.colors.accent
+                          : theme.colors.surfaceAlt,
                         borderColor: isActive ? theme.colors.accent : theme.colors.border,
                       },
                     ]}
                   >
                     <Text
                       style={[
-                        styles.categoryChipText,
-                        { color: isActive ? theme.colors.onAccent : theme.colors.text },
+                        styles.chipText,
+                        {
+                          color: isActive ? theme.colors.onAccent : theme.colors.textMuted,
+                        },
                       ]}
                     >
                       {category.emoji} {category.label}
@@ -359,163 +307,135 @@ export default function DashboardScreen() {
             <View
               style={[
                 styles.inputShell,
-                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                {
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderColor: theme.colors.border,
+                },
               ]}
             >
               <TextInput
-                placeholder="Finished my project section and submitted it on time."
+                placeholder="Describe the win, big or small..."
                 value={winText}
                 onChangeText={setWinText}
                 style={[styles.input, { color: theme.colors.text }]}
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={theme.colors.textSubtle}
                 selectionColor={theme.colors.accent}
                 multiline
               />
             </View>
 
-            <View style={styles.attachmentSection}>
-              <View style={styles.attachmentActions}>
-                <Pressable
-                  onPress={handlePickWinImage}
-                  disabled={isPickingImage}
-                  style={[
-                    styles.attachmentButton,
-                    {
-                      backgroundColor: theme.colors.surfaceAlt,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Ionicons name="image-outline" size={16} color={theme.colors.accent} />
-                  <Text style={[styles.attachmentButtonText, { color: theme.colors.text }]}>
-                    {isPickingImage
-                      ? 'Opening...'
-                      : winImageUri
-                        ? 'Change photo'
-                        : 'Add photo'}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleTakeWinPhoto}
-                  disabled={isPickingImage}
-                  style={[
-                    styles.attachmentButton,
-                    {
-                      backgroundColor: theme.colors.surfaceAlt,
-                      borderColor: theme.colors.border,
-                      opacity: isPickingImage ? 0.7 : 1,
-                    },
-                  ]}
-                >
-                  <Ionicons name="camera-outline" size={16} color={theme.colors.accent} />
-                  <Text style={[styles.attachmentButtonText, { color: theme.colors.text }]}>
-                    {isPickingImage ? 'Opening...' : 'Take photo'}
-                  </Text>
-                </Pressable>
-
-                {winImageUri ? (
-                  <Pressable
-                    onPress={handleRemoveWinImage}
-                    style={[
-                      styles.attachmentRemoveButton,
-                      {
-                        backgroundColor: theme.colors.surfaceAlt,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.attachmentRemoveText, { color: theme.colors.textMuted }]}>
-                      Remove
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {winImageUri ? (
-                <View
-                  style={[
-                    styles.attachmentPreview,
-                    {
-                      backgroundColor: theme.colors.surfaceAlt,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <Image source={winImageUri} style={styles.attachmentImage} contentFit="cover" />
-                  <Text style={[styles.attachmentCaption, { color: theme.colors.textMuted }]}>
-                    Photo will be saved with this win.
-                  </Text>
-                </View>
-              ) : (
-                <Text style={[styles.attachmentHint, { color: theme.colors.textMuted }]}>
-                  Optional: add a photo to remember this moment.
+            <View style={styles.photoRow}>
+              <Pressable
+                onPress={handlePickWinImage}
+                disabled={isPickingImage}
+                style={[
+                  styles.photoBtn,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Ionicons name="image-outline" size={15} color={theme.colors.accent} />
+                <Text style={[styles.photoBtnText, { color: theme.colors.textMuted }]}>
+                  {winImageUri ? 'Change photo' : 'Add photo'}
                 </Text>
-              )}
+              </Pressable>
+              <Pressable
+                onPress={handleTakeWinPhoto}
+                disabled={isPickingImage}
+                style={[
+                  styles.photoBtn,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Ionicons name="camera-outline" size={15} color={theme.colors.accent} />
+                <Text style={[styles.photoBtnText, { color: theme.colors.textMuted }]}>
+                  Take photo
+                </Text>
+              </Pressable>
+              {winImageUri ? (
+                <Pressable
+                  onPress={() => setWinImageUri(null)}
+                  style={[
+                    styles.photoBtn,
+                    {
+                      backgroundColor: theme.colors.surfaceAlt,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.photoBtnText, { color: theme.colors.textSubtle }]}>
+                    Remove
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
-            <View style={[styles.composerFooter, isNarrow && styles.composerFooterStacked]}>
+            {winImageUri ? (
+              <View style={[styles.imagePreview, { borderColor: theme.colors.border }]}>
+                <Image source={winImageUri} style={styles.previewImage} contentFit="cover" />
+              </View>
+            ) : null}
+
+            <View style={styles.composerFooter}>
               <View
                 style={[
                   styles.goalPill,
-                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
                 ]}
               >
-                <Pressable
-                  onPress={() => handleGoalAdjust(-1)}
-                  style={styles.goalIconButton}
-                  hitSlop={8}
-                >
-                  <Ionicons name="remove" size={16} color={theme.colors.text} />
+                <Pressable onPress={() => handleGoalAdjust(-1)} hitSlop={8} style={styles.goalBtn}>
+                  <Ionicons name="remove" size={16} color={theme.colors.textMuted} />
                 </Pressable>
-                <Text style={[styles.goalPillText, { color: theme.colors.text }]}>
+                <Text style={[styles.goalText, { color: theme.colors.textMuted }]}>
                   Goal {dailyGoal}
                 </Text>
-                <Pressable
-                  onPress={() => handleGoalAdjust(1)}
-                  style={styles.goalIconButton}
-                  hitSlop={8}
-                >
-                  <Ionicons name="add" size={16} color={theme.colors.text} />
+                <Pressable onPress={() => handleGoalAdjust(1)} hitSlop={8} style={styles.goalBtn}>
+                  <Ionicons name="add" size={16} color={theme.colors.textMuted} />
                 </Pressable>
               </View>
-
-              <View style={styles.primaryAction}>
-                <PrimaryButton label="Log This Win" onPress={handleAddWin} disabled={!canAdd} />
+              <View style={styles.logAction}>
+                <PrimaryButton label="Log this win" onPress={handleAddWin} disabled={!canAdd} />
               </View>
             </View>
           </View>
 
-          <View style={[styles.bottomRow, isNarrow && styles.bottomRowStacked]}>
+          <View style={styles.bottomRow}>
             <View
               style={[
-                styles.bottomCard,
+                styles.totalCard,
                 { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                theme.shadows.soft,
               ]}
             >
-              <Text style={[styles.bottomCardValue, { color: theme.colors.text }]}>
+              <Text style={[styles.totalValue, { color: theme.colors.text }]}>
                 {stats.totalWins}
               </Text>
-              <Text style={[styles.bottomCardLabel, { color: theme.colors.textMuted }]}>
-                total wins captured
+              <Text style={[styles.totalLabel, { color: theme.colors.textSubtle }]}>
+                Total wins
               </Text>
             </View>
-
             <Pressable
               onPress={() => router.push('/ai')}
               style={[
-                styles.bottomCard,
                 styles.reflectCard,
-                { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-                theme.shadows.soft,
+                { backgroundColor: theme.colors.text, borderColor: theme.colors.text },
               ]}
             >
-              <Text style={[styles.reflectCardTitle, { color: theme.colors.onAccent }]}>Open Reflect</Text>
-              <Text style={[styles.reflectCardText, { color: theme.colors.onAccent }]}>
-                Turn today&apos;s wins into a calm check-in.
-              </Text>
-              <Ionicons name="arrow-forward" size={18} color={theme.colors.onAccent} />
+              <Text style={styles.reflectCardTitle}>Open Reflect</Text>
+              <Text style={styles.reflectCardSub}>Turn today's wins into insight.</Text>
+              <Ionicons
+                name="arrow-forward"
+                size={16}
+                color="rgba(255,255,255,0.5)"
+                style={{ marginTop: 6 }}
+              />
             </Pressable>
           </View>
         </ScrollView>
@@ -525,317 +445,265 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
+  flex: { flex: 1 },
   container: {
-    paddingHorizontal: WinsTheme.spacing.lg,
+    paddingHorizontal: WinsTheme.spacing.md,
     paddingTop: WinsTheme.spacing.lg,
-    gap: WinsTheme.spacing.md,
-  },
-  summaryCard: {
-    borderRadius: WinsTheme.radius.lg,
-    borderWidth: 1,
-    padding: WinsTheme.spacing.lg,
     gap: WinsTheme.spacing.sm,
   },
-  summaryTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: WinsTheme.spacing.sm,
-  },
-  brandPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  brandPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  reflectShortcut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  reflectShortcutText: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.title,
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  progressTrack: {
-    height: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginTop: 2,
-  },
-  progressFill: {
-    height: '100%',
-  },
-  progressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: WinsTheme.spacing.sm,
-  },
-  progressMeta: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  quickStatsRow: {
-    flexDirection: 'row',
-    gap: WinsTheme.spacing.sm,
-  },
-  quickStatCard: {
-    flex: 1,
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  quickStatValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.title,
-  },
-  quickStatLabel: {
-    marginTop: 2,
-    fontSize: 11,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  intentionRow: {
-    marginTop: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  intentionInput: {
-    flex: 1,
-    minHeight: 40,
-    fontSize: 14,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  composerCard: {
-    borderRadius: WinsTheme.radius.lg,
-    borderWidth: 1,
-    padding: WinsTheme.spacing.lg,
-    gap: WinsTheme.spacing.md,
-  },
-  composerHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontFamily: WinsTheme.fonts.body,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  greeting: {
+    fontSize: 26,
+    fontFamily: WinsTheme.fonts.title,
+    letterSpacing: 0.2,
+    lineHeight: 32,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    lineHeight: 19,
+    marginTop: 4,
+    maxWidth: 260,
+  },
+  reflectBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: WinsTheme.radius.pill,
+    borderWidth: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  card: {
+    borderRadius: WinsTheme.radius.lg,
+    borderWidth: 0.5,
+    padding: WinsTheme.spacing.md,
     gap: WinsTheme.spacing.sm,
   },
-  sectionEyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+  cardLabel: {
+    fontSize: 10,
+    fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  progressPct: {
+    fontSize: 20,
+    fontFamily: WinsTheme.fonts.title,
+  },
+  track: {
+    height: 3,
+    borderRadius: WinsTheme.radius.pill,
+    overflow: 'hidden',
+  },
+  trackFill: {
+    height: '100%',
+    borderRadius: WinsTheme.radius.pill,
+  },
+  progressSub: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  statCell: {
+    flex: 1,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  statValue: {
+    fontSize: 17,
+    fontFamily: WinsTheme.fonts.title,
+    lineHeight: 22,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontFamily: WinsTheme.fonts.body,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  intentionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  intentionDot: {
+    width: 5,
+    height: 5,
+    borderRadius: WinsTheme.radius.pill,
+    flexShrink: 0,
+  },
+  intentionInput: {
+    flex: 1,
+    minHeight: 38,
+    fontSize: 13,
     fontFamily: WinsTheme.fonts.body,
   },
   composerTitle: {
-    marginTop: 4,
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 18,
     fontFamily: WinsTheme.fonts.title,
+    lineHeight: 24,
   },
-  categoryCountPill: {
-    borderRadius: 999,
-    borderWidth: 1,
+  chipRail: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  chip: {
+    borderRadius: WinsTheme.radius.pill,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipText: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
+  },
+  inputShell: {
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 120,
+  },
+  input: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: WinsTheme.fonts.body,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  photoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  categoryCountText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  photoBtnText: {
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
   },
-  categoryRail: {
-    gap: WinsTheme.spacing.sm,
-    paddingRight: WinsTheme.spacing.sm,
+  imagePreview: {
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    overflow: 'hidden',
   },
-  categoryChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  inputShell: {
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 190,
-  },
-  input: {
-    minHeight: 140,
-    textAlignVertical: 'top',
-    fontSize: 16,
-    lineHeight: 22,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  attachmentSection: {
-    gap: WinsTheme.spacing.sm,
-  },
-  attachmentActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: WinsTheme.spacing.sm,
-  },
-  attachmentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  attachmentButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  attachmentRemoveButton: {
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    justifyContent: 'center',
-  },
-  attachmentRemoveText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  attachmentPreview: {
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    padding: WinsTheme.spacing.sm,
-    gap: WinsTheme.spacing.sm,
-  },
-  attachmentImage: {
+  previewImage: {
     width: '100%',
-    height: 180,
-    borderRadius: WinsTheme.radius.md,
-  },
-  attachmentCaption: {
-    fontSize: 12,
-    fontFamily: WinsTheme.fonts.body,
-  },
-  attachmentHint: {
-    fontSize: 12,
-    fontFamily: WinsTheme.fonts.body,
+    height: 160,
   },
   composerFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: WinsTheme.spacing.md,
-  },
-  composerFooterStacked: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
+    gap: WinsTheme.spacing.sm,
+    marginTop: 4,
   },
   goalPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minWidth: 128,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
   },
-  goalIconButton: {
-    width: 28,
-    height: 28,
+  goalBtn: {
+    width: 26,
+    height: 26,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  goalPillText: {
-    fontSize: 14,
-    fontWeight: '700',
+  goalText: {
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
+    minWidth: 44,
+    textAlign: 'center',
   },
-  primaryAction: {
+  logAction: {
     flex: 1,
   },
   bottomRow: {
     flexDirection: 'row',
-    gap: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.sm,
+    marginTop: 4,
   },
-  bottomRowStacked: {
-    flexDirection: 'column',
-  },
-  bottomCard: {
+  totalCard: {
     flex: 1,
-    minHeight: 96,
     borderRadius: WinsTheme.radius.lg,
-    borderWidth: 1,
+    borderWidth: 0.5,
     padding: WinsTheme.spacing.md,
     justifyContent: 'center',
+    minHeight: 90,
   },
-  bottomCardValue: {
+  totalValue: {
     fontSize: 28,
-    fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
+    lineHeight: 32,
   },
-  bottomCardLabel: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
+  totalLabel: {
+    fontSize: 11,
     fontFamily: WinsTheme.fonts.body,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+    marginTop: 2,
   },
   reflectCard: {
-    gap: 6,
+    flex: 1,
+    borderRadius: WinsTheme.radius.lg,
+    borderWidth: 0.5,
+    padding: WinsTheme.spacing.md,
+    justifyContent: 'center',
+    minHeight: 90,
   },
   reflectCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.title,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
-  reflectCardText: {
-    fontSize: 13,
-    lineHeight: 18,
+  reflectCardSub: {
+    fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
-    opacity: 0.92,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 17,
+    marginTop: 2,
   },
 });

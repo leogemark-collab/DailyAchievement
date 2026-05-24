@@ -33,7 +33,7 @@ export default function WinsListScreen() {
   const { wins, stats, deleteWin, editWin } = useWins();
   const { isDark } = useTheme();
   const theme = getTheme(isDark);
-  const overlayColor = isDark ? 'rgba(8, 6, 5, 0.72)' : 'rgba(34, 25, 20, 0.38)';
+  const overlayColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(20,18,16,0.4)';
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<CategoryFilterKey>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -43,22 +43,16 @@ export default function WinsListScreen() {
   const filteredWins = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     return wins.filter((win) => {
-      const matchesQuery = normalizedQuery
-        ? win.text.toLowerCase().includes(normalizedQuery)
-        : true;
+      const matchesQuery = normalizedQuery ? win.text.toLowerCase().includes(normalizedQuery) : true;
       const matchesCategory = activeCategory === 'all' ? true : win.category === activeCategory;
       return matchesQuery && matchesCategory;
     });
   }, [wins, searchQuery, activeCategory]);
 
   const handleDeleteWin = (id: string, text: string) => {
-    Alert.alert('Delete Moment', `Are you sure you want to delete "${text}"?`, [
-      { text: 'Cancel', onPress: () => {}, style: 'cancel' },
-      {
-        text: 'Delete',
-        onPress: () => deleteWin(id),
-        style: 'destructive',
-      },
+    Alert.alert('Delete this win?', `"${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', onPress: () => deleteWin(id), style: 'destructive' },
     ]);
   };
 
@@ -77,16 +71,11 @@ export default function WinsListScreen() {
 
   const renderItem = ({ item }: { item: Win }) => {
     const meta = getCategoryMeta(item.category);
-
     return (
       <View
         style={[
           styles.listItem,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-          },
-          theme.shadows.soft,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
         ]}
       >
         <View style={[styles.listAccent, { backgroundColor: theme.colors.accent }]} />
@@ -105,39 +94,31 @@ export default function WinsListScreen() {
                 },
               ]}
             >
-              <Text style={[styles.categoryBadgeText, { color: theme.colors.text }]}>
+              <Text style={[styles.categoryBadgeText, { color: theme.colors.textMuted }]}>
                 {meta.emoji} {meta.label}
               </Text>
             </View>
-            <Text style={[styles.winDate, { color: theme.colors.textMuted }]}>{item.date}</Text>
+            <Text style={[styles.winDate, { color: theme.colors.textSubtle }]}>{item.date}</Text>
           </View>
         </Pressable>
         <View style={styles.actionButtons}>
           <Pressable
             onPress={() => handleEditWin(item.id, item.text)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              {
-                backgroundColor: theme.colors.surfaceAlt,
-                borderColor: theme.colors.border,
-              },
-              pressed && styles.actionButtonPressed,
+            style={[
+              styles.actionBtn,
+              { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
             ]}
           >
-            <Ionicons name="create-outline" size={18} color={theme.colors.text} />
+            <Ionicons name="create-outline" size={16} color={theme.colors.textMuted} />
           </Pressable>
           <Pressable
             onPress={() => handleDeleteWin(item.id, item.text)}
-            style={({ pressed }) => [
-              styles.actionButton,
-              {
-                backgroundColor: theme.colors.dangerSoft,
-                borderColor: theme.colors.border,
-              },
-              pressed && styles.actionButtonPressed,
+            style={[
+              styles.actionBtn,
+              { backgroundColor: theme.colors.dangerSoft, borderColor: theme.colors.border },
             ]}
           >
-            <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+            <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
           </Pressable>
         </View>
       </View>
@@ -150,99 +131,72 @@ export default function WinsListScreen() {
         data={filteredWins}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: tabBarHeight + WinsTheme.spacing.xl },
-        ]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 24 }]}
         ListHeaderComponent={
-          <View
-            style={[
-              styles.headerCard,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.card,
-            ]}
-          >
-            <Text style={[styles.title, { color: theme.colors.text }]}>Moments</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              Revisit the wins you logged, search for patterns, and refine the wording when needed.
-            </Text>
-            <View style={styles.summaryRow}>
-              <View
-                style={[
-                  styles.summaryPill,
-                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[styles.summaryPillValue, { color: theme.colors.text }]}>
-                  {stats.totalWins}
-                </Text>
-                <Text style={[styles.summaryPillLabel, { color: theme.colors.textMuted }]}>
-                  Total wins
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.summaryPill,
-                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[styles.summaryPillValue, { color: theme.colors.text }]}>
-                  {filteredWins.length}
-                </Text>
-                <Text style={[styles.summaryPillLabel, { color: theme.colors.textMuted }]}>
-                  Showing
+          <View style={styles.listHeader}>
+            <View style={styles.titleRow}>
+              <View>
+                <Text style={[styles.title, { color: theme.colors.text }]}>Wins</Text>
+                <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+                  {stats.totalWins} total - {filteredWins.length} showing
                 </Text>
               </View>
             </View>
-            <View style={styles.searchBlock}>
+
+            <View
+              style={[
+                styles.searchRow,
+                { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+              ]}
+            >
+              <Ionicons name="search-outline" size={15} color={theme.colors.textSubtle} />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search your moments..."
-                placeholderTextColor={theme.colors.textMuted}
+                placeholder="Search wins..."
+                placeholderTextColor={theme.colors.textSubtle}
                 selectionColor={theme.colors.accent}
-                style={[
-                  styles.searchInput,
-                  {
-                    color: theme.colors.text,
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceAlt,
-                  },
-                ]}
+                style={[styles.searchInput, { color: theme.colors.text }]}
               />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
-              >
-                {allCategories.map((category) => {
-                  const isActive = category.key === activeCategory;
-                  return (
-                    <Pressable
-                      key={category.key}
-                      onPress={() => setActiveCategory(category.key)}
+              {searchQuery.length > 0 ? (
+                <Pressable onPress={() => setSearchQuery('')} hitSlop={10}>
+                  <Ionicons name="close-circle" size={15} color={theme.colors.textSubtle} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
+              {allCategories.map((category) => {
+                const isActive = category.key === activeCategory;
+                return (
+                  <Pressable
+                    key={category.key}
+                    onPress={() => setActiveCategory(category.key)}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor: isActive
+                          ? theme.colors.accent
+                          : theme.colors.surfaceAlt,
+                        borderColor: isActive ? theme.colors.accent : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.filterChip,
+                        styles.filterChipText,
                         {
-                          backgroundColor: isActive ? theme.colors.accent : theme.colors.surfaceAlt,
-                          borderColor: isActive ? theme.colors.accent : theme.colors.border,
+                          color: isActive ? theme.colors.onAccent : theme.colors.textMuted,
                         },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          { color: isActive ? theme.colors.onAccent : theme.colors.text },
-                        ]}
-                      >
-                        {category.emoji ? `${category.emoji} ` : ''}
-                        {category.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
+                      {category.emoji ? `${category.emoji} ` : ''}
+                      {category.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={
@@ -250,16 +204,15 @@ export default function WinsListScreen() {
             style={[
               styles.emptyState,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.card,
             ]}
           >
             <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
-              {isFiltering ? 'No moments found' : 'No moments yet'}
+              {isFiltering ? 'No wins found' : 'No wins yet'}
             </Text>
             <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
               {isFiltering
-                ? 'Nothing matches the search or filters you set. Try broadening the view.'
-                : 'Log your first win on the Today screen and Dayflow will start building your timeline.'}
+                ? 'Try broadening your search or changing the filter.'
+                : 'Log your first win on the Today screen.'}
             </Text>
             <PrimaryButton
               label="Go to Today"
@@ -270,21 +223,15 @@ export default function WinsListScreen() {
         }
       />
 
-      <Modal
-        visible={!!editingId}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEditingId(null)}
-      >
+      <Modal visible={!!editingId} transparent animationType="fade" onRequestClose={() => setEditingId(null)}>
         <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
           <View
             style={[
               styles.modalContent,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              theme.shadows.card,
             ]}
           >
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Edit moment</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Edit win</Text>
             <TextInput
               style={[
                 styles.modalInput,
@@ -295,7 +242,7 @@ export default function WinsListScreen() {
                 },
               ]}
               placeholder="Refine the wording..."
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={theme.colors.textSubtle}
               value={editText}
               onChangeText={setEditText}
               selectionColor={theme.colors.accent}
@@ -303,29 +250,24 @@ export default function WinsListScreen() {
             />
             <View style={styles.modalActions}>
               <Pressable
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  styles.cancelButton,
-                  {
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceAlt,
-                  },
-                  pressed && styles.modalButtonPressed,
+                style={[
+                  styles.modalBtn,
+                  { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt },
                 ]}
                 onPress={() => setEditingId(null)}
               >
-                <Text style={[styles.modalButtonText, { color: theme.colors.textMuted }]}>Cancel</Text>
+                <Text style={[styles.modalBtnText, { color: theme.colors.textMuted }]}>
+                  Cancel
+                </Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  styles.saveButton,
-                  { backgroundColor: theme.colors.accent },
-                  pressed && styles.modalButtonPressed,
+                style={[
+                  styles.modalBtn,
+                  { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
                 ]}
                 onPress={handleSaveEdit}
               >
-                <Text style={[styles.modalButtonText, { color: theme.colors.onAccent }]}>Save</Text>
+                <Text style={[styles.modalBtnText, { color: theme.colors.onAccent }]}>Save</Text>
               </Pressable>
             </View>
           </View>
@@ -337,207 +279,184 @@ export default function WinsListScreen() {
 
 const styles = StyleSheet.create({
   listContent: {
-    padding: WinsTheme.spacing.lg,
-    gap: WinsTheme.spacing.md,
-    paddingBottom: WinsTheme.spacing.xl,
+    paddingHorizontal: WinsTheme.spacing.md,
+    paddingTop: WinsTheme.spacing.lg,
+    gap: WinsTheme.spacing.sm,
   },
-  headerCard: {
-    borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
-    borderWidth: 1,
-    gap: WinsTheme.spacing.md,
+  listHeader: {
+    gap: WinsTheme.spacing.sm,
     marginBottom: WinsTheme.spacing.sm,
   },
-  searchBlock: {
-    gap: WinsTheme.spacing.sm,
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 26,
+    fontFamily: WinsTheme.fonts.title,
+    letterSpacing: 0.2,
+    lineHeight: 32,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontFamily: WinsTheme.fonts.body,
+    marginTop: 2,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   searchInput: {
-    borderWidth: 1,
-    borderRadius: WinsTheme.radius.md,
-    paddingHorizontal: WinsTheme.spacing.md,
-    paddingVertical: 12,
-    fontSize: 15,
+    flex: 1,
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
   },
-  filterChips: {
-    gap: WinsTheme.spacing.sm,
-    paddingBottom: 2,
+  filterRail: {
+    gap: 6,
+    paddingRight: 8,
   },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: WinsTheme.radius.pill,
+    borderWidth: 0.5,
   },
   filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.title,
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: WinsTheme.fonts.body,
-    lineHeight: 20,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: WinsTheme.spacing.sm,
-  },
-  summaryPill: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
-  },
-  summaryPillValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.title,
-  },
-  summaryPillLabel: {
-    marginTop: 4,
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '500',
   },
   listItem: {
     borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
-    borderWidth: 1,
+    borderWidth: 0.5,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: WinsTheme.spacing.md,
     overflow: 'hidden',
+    padding: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.sm,
   },
   listAccent: {
-    width: 6,
+    width: 3,
     alignSelf: 'stretch',
-    borderRadius: 999,
+    borderRadius: WinsTheme.radius.pill,
+    flexShrink: 0,
   },
   winContent: {
     flex: 1,
   },
   winText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   winImage: {
     width: '100%',
-    height: 164,
-    borderRadius: WinsTheme.radius.md,
+    height: 140,
+    borderRadius: WinsTheme.radius.sm,
     marginTop: WinsTheme.spacing.sm,
   },
   winMeta: {
-    marginTop: WinsTheme.spacing.sm,
+    marginTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: WinsTheme.spacing.sm,
+    gap: 6,
   },
   categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: WinsTheme.radius.pill,
+    borderWidth: 0.5,
   },
   categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
     fontFamily: WinsTheme.fonts.body,
   },
   winDate: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: WinsTheme.fonts.body,
   },
   actionButtons: {
-    flexDirection: 'row',
-    gap: WinsTheme.spacing.sm,
+    flexDirection: 'column',
+    gap: 6,
   },
-  actionButton: {
-    padding: WinsTheme.spacing.sm,
-    borderRadius: WinsTheme.radius.md,
-    borderWidth: 1,
-  },
-  actionButtonPressed: {
-    opacity: 0.72,
+  actionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
-    marginTop: WinsTheme.spacing.xl,
     borderRadius: WinsTheme.radius.lg,
+    borderWidth: 0.5,
     padding: WinsTheme.spacing.lg,
-    borderWidth: 1,
-    gap: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.sm,
     alignItems: 'center',
+    marginTop: WinsTheme.spacing.lg,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 18,
     fontFamily: WinsTheme.fonts.title,
     textAlign: 'center',
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: WinsTheme.fonts.body,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 19,
   },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: WinsTheme.spacing.lg,
+    padding: WinsTheme.spacing.md,
   },
   modalContent: {
     width: '100%',
     borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
-    gap: WinsTheme.spacing.md,
-    borderWidth: 1,
+    borderWidth: 0.5,
+    padding: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.sm,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 18,
     fontFamily: WinsTheme.fonts.title,
+    marginBottom: 4,
   },
   modalInput: {
-    borderWidth: 1,
-    borderRadius: WinsTheme.radius.md,
-    padding: WinsTheme.spacing.md,
-    fontSize: 16,
+    borderWidth: 0.5,
+    borderRadius: WinsTheme.radius.sm,
+    padding: WinsTheme.spacing.sm,
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
-    minHeight: 110,
+    minHeight: 100,
     textAlignVertical: 'top',
+    lineHeight: 20,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: WinsTheme.spacing.md,
-    marginTop: WinsTheme.spacing.sm,
+    gap: WinsTheme.spacing.sm,
+    marginTop: 4,
   },
-  modalButton: {
+  modalBtn: {
     flex: 1,
-    borderRadius: WinsTheme.radius.md,
-    paddingVertical: WinsTheme.spacing.md,
+    borderRadius: WinsTheme.radius.sm,
+    borderWidth: 0.5,
+    paddingVertical: 12,
     alignItems: 'center',
   },
-  modalButtonPressed: {
-    opacity: 0.72,
-  },
-  cancelButton: {
-    borderWidth: 1,
-  },
-  saveButton: {},
-  modalButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+  modalBtnText: {
+    fontSize: 14,
     fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
   },
 });

@@ -18,7 +18,7 @@ function TabIcon({
   focused: boolean;
   inactiveName: TabIconName;
 }) {
-  return <Ionicons name={focused ? activeName : inactiveName} size={focused ? 22 : 20} color={color} />;
+  return <Ionicons name={focused ? activeName : inactiveName} size={22} color={color} />;
 }
 
 export default function TabsLayout() {
@@ -32,29 +32,28 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: 'transparent' },
         tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarInactiveTintColor: theme.colors.textSubtle,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontFamily: theme.fonts.body,
-          fontSize: 11,
-          fontWeight: '700',
-          letterSpacing: 0.3,
-          marginBottom: 2,
+          fontSize: 10,
+          fontWeight: '500',
+          letterSpacing: 0.2,
+          marginBottom: 4,
         },
         tabBarItemStyle: {
-          marginVertical: 8,
-          borderRadius: 18,
+          paddingTop: 6,
         },
         tabBarStyle: {
           position: 'absolute',
-          left: 18,
-          right: 18,
-          bottom: 18,
-          height: 78,
-          paddingTop: 6,
-          paddingBottom: 8,
+          left: 16,
+          right: 16,
+          bottom: 16,
+          height: 68,
           borderTopWidth: 0,
-          borderRadius: 28,
+          borderRadius: 16,
+          borderWidth: 0.5,
+          borderColor: theme.colors.border,
           backgroundColor: theme.colors.surface,
           ...theme.shadows.card,
         },
@@ -67,10 +66,10 @@ export default function TabsLayout() {
           title: 'Today',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              activeName="sparkles"
+              activeName="home"
               color={color}
               focused={focused}
-              inactiveName="sparkles-outline"
+              inactiveName="home-outline"
             />
           ),
         }}
@@ -78,13 +77,13 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="wins"
         options={{
-          title: 'Moments',
+          title: 'Wins',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
-              activeName="albums"
+              activeName="trophy"
               color={color}
               focused={focused}
-              inactiveName="albums-outline"
+              inactiveName="trophy-outline"
             />
           ),
         }}

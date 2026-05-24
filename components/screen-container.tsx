@@ -21,7 +21,7 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
           styles.washTop,
           {
             backgroundColor: theme.colors.hero,
-            opacity: isDark ? 0.5 : 0.9,
+            opacity: isDark ? 0.72 : 0.96,
           },
         ]}
       />
@@ -31,7 +31,7 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
           styles.blobRight,
           {
             backgroundColor: theme.colors.accentSoft,
-            opacity: isDark ? 0.28 : 0.75,
+            opacity: isDark ? 0.32 : 0.82,
           },
         ]}
       />
@@ -41,7 +41,7 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
           styles.blobLeft,
           {
             backgroundColor: theme.colors.accentAlt,
-            opacity: isDark ? 0.22 : 0.5,
+            opacity: isDark ? 0.16 : 0.22,
           },
         ]}
       />
@@ -51,7 +51,7 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
           styles.blobBottom,
           {
             backgroundColor: theme.colors.highlight,
-            opacity: isDark ? 0.18 : 0.42,
+            opacity: isDark ? 0.10 : 0.14,
           },
         ]}
       />
@@ -72,32 +72,32 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 280,
-    borderBottomLeftRadius: 44,
-    borderBottomRightRadius: 44,
+    height: 230,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
   },
   blobRight: {
     position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    top: 40,
-    right: -90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: 32,
+    right: -72,
   },
   blobLeft: {
     position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    top: 200,
-    left: -80,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    top: 220,
+    left: -58,
   },
   blobBottom: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    bottom: -170,
-    left: 40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    bottom: -120,
+    right: 20,
   },
 });

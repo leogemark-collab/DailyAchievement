@@ -22,17 +22,17 @@ export function PrimaryButton({
   const theme = getTheme(isDark);
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
-  const textColor = isPrimary || isDanger ? theme.colors.onAccent : theme.colors.accent;
   const backgroundColor = isPrimary
     ? theme.colors.accent
     : isDanger
       ? theme.colors.danger
-      : theme.colors.surface;
+      : 'transparent';
   const borderColor = isPrimary
     ? theme.colors.accent
     : isDanger
       ? theme.colors.danger
-      : theme.colors.border;
+      : theme.colors.borderStrong;
+  const textColor = isPrimary || isDanger ? theme.colors.onAccent : theme.colors.accent;
 
   return (
     <Pressable
@@ -41,37 +41,36 @@ export function PrimaryButton({
       style={({ pressed }) => [
         styles.base,
         { backgroundColor, borderColor },
-        isPrimary || isDanger ? theme.shadows.soft : null,
-        disabled ? styles.disabled : null,
-        pressed && !disabled ? styles.pressed : null,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
       ]}
     >
-      <Text style={[styles.text, { color: textColor }]}>{label}</Text>
+      <Text style={[styles.label, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    minHeight: 52,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    minHeight: 48,
     borderRadius: WinsTheme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
-  text: {
-    fontSize: 15,
-    fontWeight: '700',
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
     fontFamily: WinsTheme.fonts.body,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
   disabled: {
-    opacity: 0.55,
+    opacity: 0.4,
   },
 });

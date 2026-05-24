@@ -38,7 +38,6 @@ export default function LoginScreen() {
   useEffect(() => {
     if (!isReady || !session?.user) return;
     const savedName = getAuthDisplayName(user);
-
     if (!savedName) return;
     setUserName(savedName);
     router.replace('/dashboard');
@@ -60,16 +59,12 @@ export default function LoginScreen() {
         router.replace('/dashboard');
       } else {
         const result = await signUpWithEmail(trimmedEmail, password, trimmedName);
-
         if (result.requiresEmailConfirmation) {
-          setNotice(
-            'Account created. Check your email to confirm it, then come back and sign in. If you already created this account earlier, use Sign In instead of requesting another signup email.'
-          );
+          setNotice('Account created. Check your email to confirm it, then sign in.');
           setMode('sign-in');
           setPassword('');
           return;
         }
-
         setUserName(result.displayName);
         router.replace('/dashboard');
       }
@@ -80,24 +75,26 @@ export default function LoginScreen() {
     }
   };
 
+  const clearFeedback = () => {
+    if (error || notice) {
+      setError('');
+      setNotice('');
+    }
+  };
+
   const isFormReady =
     email.trim().length > 0 &&
     password.length >= 6 &&
     (mode === 'sign-in' || displayName.trim().length >= 2) &&
     !isSubmitting;
-  const title =
-    mode === 'sign-in' ? `Welcome back to ${BRAND_NAME}` : `Create your ${BRAND_NAME} account`;
-  const subtitle =
-    mode === 'sign-in'
-      ? 'Sign in with your email to sync your wins, reflections, and progress.'
-      : 'Use email and password so your Supabase data stays connected to your account.';
+
   const ctaLabel = isSubmitting
     ? mode === 'sign-in'
       ? 'Signing in...'
       : 'Creating account...'
     : mode === 'sign-in'
-      ? 'Sign In'
-      : 'Create Account';
+      ? 'Sign in'
+      : 'Create account';
 
   return (
     <ScreenContainer>
@@ -107,36 +104,23 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.heroCard,
-            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-            theme.shadows.card,
-          ]}
-        >
-          <View
-            style={[
-              styles.brandBadge,
-              { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border },
-            ]}
-          >
-            <Text style={[styles.brandBadgeText, { color: theme.colors.accent }]}>
-              Daily progress
-            </Text>
-          </View>
+        <View style={styles.hero}>
           <Text style={[styles.brandName, { color: theme.colors.text }]}>{BRAND_NAME}</Text>
-          <Text style={[styles.heroTagline, { color: theme.colors.textMuted }]}>{BRAND_TAGLINE}</Text>
-          <Text style={[styles.heroPromise, { color: theme.colors.textMuted }]}>{BRAND_PROMISE}</Text>
+          <Text style={[styles.tagline, { color: theme.colors.textMuted }]}>{BRAND_TAGLINE}</Text>
+          <Text style={[styles.promise, { color: theme.colors.textSubtle }]}>{BRAND_PROMISE}</Text>
           <View style={styles.pillRow}>
             {FEATURE_PILLS.map((pill) => (
               <View
                 key={pill}
                 style={[
-                  styles.featurePill,
-                  { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border },
+                  styles.pill,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
                 ]}
               >
-                <Text style={[styles.featurePillText, { color: theme.colors.text }]}>{pill}</Text>
+                <Text style={[styles.pillText, { color: theme.colors.textMuted }]}>{pill}</Text>
               </View>
             ))}
           </View>
@@ -144,78 +128,50 @@ export default function LoginScreen() {
 
         <View
           style={[
-            styles.inputCard,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-            theme.shadows.card,
+            styles.formCard,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
           ]}
         >
-          <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{subtitle}</Text>
-
-          <View style={styles.modeRow}>
-            <Pressable
-              onPress={() => {
-                setMode('sign-in');
-                setError('');
-                setNotice('');
-              }}
-              style={[
-                styles.modeChip,
-                {
-                  backgroundColor: mode === 'sign-in' ? theme.colors.accent : theme.colors.surfaceAlt,
-                  borderColor: mode === 'sign-in' ? theme.colors.accent : theme.colors.border,
-                },
-              ]}
-            >
-              <Text
+          <View style={[styles.modeToggle, { backgroundColor: theme.colors.surfaceAlt }]}>
+            {(['sign-in', 'sign-up'] as const).map((nextMode) => (
+              <Pressable
+                key={nextMode}
+                onPress={() => {
+                  setMode(nextMode);
+                  setError('');
+                  setNotice('');
+                }}
                 style={[
-                  styles.modeChipText,
-                  { color: mode === 'sign-in' ? theme.colors.onAccent : theme.colors.text },
+                  styles.modeBtn,
+                  nextMode === mode
+                    ? [styles.modeBtnActive, { backgroundColor: theme.colors.surface }]
+                    : null,
                 ]}
               >
-                Sign In
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setMode('sign-up');
-                setError('');
-                setNotice('');
-              }}
-              style={[
-                styles.modeChip,
-                {
-                  backgroundColor: mode === 'sign-up' ? theme.colors.accent : theme.colors.surfaceAlt,
-                  borderColor: mode === 'sign-up' ? theme.colors.accent : theme.colors.border,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modeChipText,
-                  { color: mode === 'sign-up' ? theme.colors.onAccent : theme.colors.text },
-                ]}
-              >
-                Create Account
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.modeBtnText,
+                    {
+                      color:
+                        nextMode === mode ? theme.colors.text : theme.colors.textSubtle,
+                    },
+                  ]}
+                >
+                  {nextMode === 'sign-in' ? 'Sign in' : 'Create account'}
+                </Text>
+              </Pressable>
+            ))}
           </View>
 
           {mode === 'sign-up' ? (
             <>
-              <Text style={[styles.label, { color: theme.colors.textMuted }]}>Name</Text>
+              <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Name</Text>
               <TextInput
                 placeholder="Alex"
                 value={displayName}
                 onChangeText={(value) => {
                   setDisplayName(value);
-                  if (error || notice) {
-                    setError('');
-                    setNotice('');
-                  }
+                  clearFeedback();
                 }}
                 style={[
                   styles.input,
@@ -225,7 +181,7 @@ export default function LoginScreen() {
                     backgroundColor: theme.colors.surfaceAlt,
                   },
                 ]}
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={theme.colors.textSubtle}
                 selectionColor={theme.colors.accent}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -233,16 +189,13 @@ export default function LoginScreen() {
             </>
           ) : null}
 
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Email</Text>
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Email</Text>
           <TextInput
-            placeholder="student@example.com"
+            placeholder="you@example.com"
             value={email}
             onChangeText={(value) => {
               setEmail(value);
-              if (error || notice) {
-                setError('');
-                setNotice('');
-              }
+              clearFeedback();
             }}
             style={[
               styles.input,
@@ -252,22 +205,20 @@ export default function LoginScreen() {
                 backgroundColor: theme.colors.surfaceAlt,
               },
             ]}
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.textSubtle}
             selectionColor={theme.colors.accent}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
           />
-          <Text style={[styles.label, { color: theme.colors.textMuted }]}>Password</Text>
+
+          <Text style={[styles.label, { color: theme.colors.textSubtle }]}>Password</Text>
           <TextInput
             placeholder="At least 6 characters"
             value={password}
             onChangeText={(value) => {
               setPassword(value);
-              if (error || notice) {
-                setError('');
-                setNotice('');
-              }
+              clearFeedback();
             }}
             style={[
               styles.input,
@@ -277,21 +228,15 @@ export default function LoginScreen() {
                 backgroundColor: theme.colors.surfaceAlt,
               },
             ]}
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.textSubtle}
             selectionColor={theme.colors.accent}
             secureTextEntry
             autoCapitalize="none"
           />
+
           {!isConfigured ? (
             <Text style={[styles.errorText, { color: theme.colors.danger }]}>
-              Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`
-              before signing in.
-            </Text>
-          ) : null}
-          {mode === 'sign-up' ? (
-            <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
-              If Supabase Confirm email is enabled, you will need to verify your email before the
-              first sign in.
+              Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
             </Text>
           ) : null}
           {notice ? (
@@ -302,17 +247,14 @@ export default function LoginScreen() {
           ) : null}
           {isSubmitting ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator color={theme.colors.accent} />
-              <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
-                Connecting to Supabase...
+              <ActivityIndicator color={theme.colors.accent} size="small" />
+              <Text style={[styles.helperText, { color: theme.colors.textSubtle }]}>
+                Connecting...
               </Text>
             </View>
           ) : null}
-          <PrimaryButton
-            label={ctaLabel}
-            onPress={handleSubmit}
-            disabled={!isFormReady || !isConfigured}
-          />
+
+          <PrimaryButton label={ctaLabel} onPress={handleSubmit} disabled={!isFormReady || !isConfigured} />
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -320,137 +262,117 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   content: {
-    padding: WinsTheme.spacing.lg,
-    gap: WinsTheme.spacing.lg,
-    justifyContent: 'center',
+    padding: WinsTheme.spacing.md,
+    paddingTop: WinsTheme.spacing.xl,
+    gap: WinsTheme.spacing.md,
     minHeight: '100%',
+    justifyContent: 'center',
   },
-  heroCard: {
-    borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
-    borderWidth: 1,
-    gap: WinsTheme.spacing.sm,
-  },
-  brandBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  brandBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.body,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+  hero: {
+    gap: 8,
+    paddingBottom: 8,
   },
   brandName: {
     fontSize: 34,
-    fontWeight: '700',
     fontFamily: WinsTheme.fonts.title,
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
+    lineHeight: 40,
   },
-  heroTagline: {
+  tagline: {
     fontSize: 16,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 22,
+    lineHeight: 23,
   },
-  heroPromise: {
-    fontSize: 14,
+  promise: {
+    fontSize: 13,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 20,
+    lineHeight: 19,
   },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: WinsTheme.spacing.sm,
-    marginTop: WinsTheme.spacing.sm,
+    gap: 6,
+    marginTop: 4,
   },
-  featurePill: {
+  pill: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
+    paddingVertical: 6,
+    borderRadius: WinsTheme.radius.pill,
+    borderWidth: 0.5,
   },
-  featurePillText: {
+  pillText: {
     fontSize: 12,
-    fontWeight: '600',
     fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
   },
-  inputCard: {
+  formCard: {
     borderRadius: WinsTheme.radius.lg,
-    padding: WinsTheme.spacing.lg,
-    borderWidth: 1,
-    gap: WinsTheme.spacing.md,
+    borderWidth: 0.5,
+    padding: WinsTheme.spacing.md,
+    gap: WinsTheme.spacing.sm,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.title,
-    letterSpacing: 0.2,
+  modeToggle: {
+    flexDirection: 'row',
+    borderRadius: WinsTheme.radius.pill,
+    padding: 3,
+    marginBottom: 4,
   },
-  subtitle: {
+  modeBtn: {
+    flex: 1,
+    borderRadius: WinsTheme.radius.pill,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  modeBtnActive: {
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
+  },
+  label: {
+    fontSize: 10,
+    fontFamily: WinsTheme.fonts.body,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: -2,
+  },
+  input: {
+    borderWidth: 0.5,
+    borderRadius: WinsTheme.radius.sm,
+    paddingHorizontal: WinsTheme.spacing.sm,
+    paddingVertical: 12,
+    minHeight: 46,
     fontSize: 15,
     fontFamily: WinsTheme.fonts.body,
     lineHeight: 21,
   },
-  modeRow: {
-    flexDirection: 'row',
-    gap: WinsTheme.spacing.sm,
-    marginTop: WinsTheme.spacing.sm,
-  },
-  modeChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  modeChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: WinsTheme.fonts.body,
-  },
-  label: {
-    fontSize: 13,
-    fontFamily: WinsTheme.fonts.body,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: WinsTheme.radius.md,
-    paddingHorizontal: WinsTheme.spacing.md,
-    paddingVertical: 12,
-    minHeight: 50,
-    fontSize: 16,
-    fontFamily: WinsTheme.fonts.body,
-    lineHeight: 22,
-  },
   helperText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   noticeText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   errorText: {
     fontSize: 12,
     fontFamily: WinsTheme.fonts.body,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: WinsTheme.spacing.sm,
+    gap: 8,
   },
 });
