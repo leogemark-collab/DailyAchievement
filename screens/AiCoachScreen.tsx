@@ -24,6 +24,7 @@ import { getTheme } from '@/constants/theme-utils';
 import { useTheme } from '@/hooks/use-theme';
 import { useWins } from '@/hooks/use-wins';
 import type { DailyMoodMap, JournalAnalysis, JournalEntry } from '@/types/journal';
+import { isCompleteQuestion, isCompleteSentence, trimToCompleteSentence } from '@/utils/ai-text';
 import { generateGeminiText } from '@/utils/gemini';
 import {
   journalBundleHasMeaningfulData,
@@ -126,6 +127,16 @@ type WeeklyInsight = {
   parsed: boolean;
 };
 
+const JOURNAL_FALLBACK_FEEDBACK =
+  "Thank you for sharing this. I'm here with you, and it sounds like a lot is sitting on your mind right now. It's okay to take this moment one small step at a time. If it helps, choose one gentle action that supports you today, even if it's tiny.";
+const JOURNAL_FALLBACK_QUESTION = 'What feels most important to you to hold gently today?';
+const WEEKLY_FALLBACK_THEME =
+  'Your recent reflections show that you are paying attention to your days and trying to understand yourself with care.';
+const WEEKLY_FALLBACK_PROGRESS =
+  'You are building progress by naming what happened, how it felt, and what you can carry forward.';
+const WEEKLY_FALLBACK_FOCUS =
+  'For the next few days, choose one small action that supports your energy and makes the day feel a little lighter.';
+
 const padDay = (value: number) => value.toString().padStart(2, '0');
 const toDayKey = (date: Date) =>
   `${date.getFullYear()}-${padDay(date.getMonth() + 1)}-${padDay(date.getDate())}`;
@@ -173,10 +184,11 @@ const buildPrompt = (name: string, entry: string, moodLabel: string) => {
 Your top priority is empathy and validation of feelings. Use a warm, non-judgmental tone.
 If a mood is provided, acknowledge it gently in the feedback.
 Avoid medical or clinical advice or diagnosis. If the entry suggests intense distress, gently encourage reaching out to a trusted person or support resources.
-Analyze the journal entry. Respond with exactly three lines using these labels (one line per label, no extra line breaks):
+Analyze the journal entry. Respond with exactly three complete lines using these labels (one line per label, no extra line breaks):
 Feeling: <1-3 words>
-Feedback: <4-6 sentences that validate feelings, reflect 1-2 details from the entry, and offer gentle, practical support>
-Question: <one gentle follow-up question in 1 sentence>
+Feedback: <3-4 complete sentences that validate feelings, reflect 1-2 details from the entry, and offer gentle, practical support>
+Question: <one complete gentle follow-up question in 1 sentence>
+Finish every sentence. If space is limited, write less rather than stopping mid-sentence.
 
 Name: ${name}
 ${moodLine}
@@ -188,10 +200,11 @@ const buildRepairPrompt = (name: string, entry: string, moodLabel: string, previ
   const moodLine = moodLabel ? `Mood today: ${moodLabel}` : 'Mood today: not set';
 
   return `Your previous response was incomplete. Rewrite it fully.
-Return exactly three lines with these labels (one line per label, no extra line breaks):
+Return exactly three complete lines with these labels (one line per label, no extra line breaks):
 Feeling: <1-3 words>
-Feedback: <4-6 sentences that validate feelings, reflect 1-2 details from the entry, and offer gentle, practical support>
+Feedback: <3-4 complete sentences that validate feelings, reflect 1-2 details from the entry, and offer gentle, practical support>
 Question: <one gentle follow-up question in 1 sentence, ending with a question mark>
+Finish every sentence. If space is limited, write less rather than stopping mid-sentence.
 
 Name: ${name}
 ${moodLine}
@@ -210,15 +223,38 @@ const buildWeeklyPrompt = (name: string, entries: JournalEntry[]) => {
     .join('\n');
 
   return `You are a supportive journaling companion for a student.
-Summarize the recent journal entries with empathy and practicality. Respond with exactly three lines using these labels:
+Summarize the recent journal entries with empathy and practicality. Respond with exactly three complete lines using these labels:
 Theme: <1 sentence about the main emotional theme>
 Progress: <1 sentence noting any positive steps or resilience>
 Gentle focus: <1 sentence with a small, realistic focus for the next few days>
 Avoid medical or clinical advice.
+Finish every sentence. If space is limited, write shorter sentences rather than stopping mid-sentence.
 
 Name: ${name}
 Recent entries:
 ${summary}`;
+};
+
+const buildWeeklyRepairPrompt = (name: string, entries: JournalEntry[], previous: string) => {
+  const summary = entries
+    .map((item, index) => {
+      const moodNote = item.mood ? `Mood: ${item.mood} - ` : '';
+      return `${index + 1}. [${item.dateLabel}] ${moodNote}${item.entry.slice(0, 240)}`;
+    })
+    .join('\n');
+
+  return `Your previous weekly summary was incomplete. Rewrite it fully.
+Return exactly three complete lines:
+Theme: <one complete sentence>
+Progress: <one complete sentence>
+Gentle focus: <one complete sentence>
+
+Name: ${name}
+Recent entries:
+${summary}
+
+Previous response:
+${previous}`;
 };
 
 const parseAnalysis = (text: string): JournalAnalysis => {
@@ -293,6 +329,22 @@ const parseWeeklyInsight = (text: string): WeeklyInsight => {
     parsed,
   };
 };
+
+const weeklyInsightNeedsRepair = (insight: WeeklyInsight) =>
+  !insight.theme ||
+  !isCompleteSentence(insight.theme) ||
+  !insight.progress ||
+  !isCompleteSentence(insight.progress) ||
+  !insight.focus ||
+  !isCompleteSentence(insight.focus);
+
+const completeWeeklyInsight = (insight: WeeklyInsight): WeeklyInsight => ({
+  ...insight,
+  theme: trimToCompleteSentence(insight.theme, WEEKLY_FALLBACK_THEME),
+  progress: trimToCompleteSentence(insight.progress, WEEKLY_FALLBACK_PROGRESS),
+  focus: trimToCompleteSentence(insight.focus, WEEKLY_FALLBACK_FOCUS),
+  parsed: true,
+});
 
 export default function AiCoachScreen() {
   const { userName, setDailyIntention, dailyIntention } = useWins();
@@ -619,13 +671,15 @@ export default function AiCoachScreen() {
     setSaveNotice('');
     try {
       const prompt = buildPrompt(name, journalText, selectedMood?.label ?? '');
-      const aiText = await generateGeminiText(prompt);
+      const aiText = await generateGeminiText(prompt, { maxOutputTokens: 1800 });
       let parsedAnalysis = parseAnalysis(aiText);
 
       const needsRepair =
         !parsedAnalysis.feedback ||
         parsedAnalysis.feedback.length < 60 ||
+        !isCompleteSentence(parsedAnalysis.feedback) ||
         !parsedAnalysis.question ||
+        !isCompleteQuestion(parsedAnalysis.question) ||
         !parsedAnalysis.feeling;
 
       if (needsRepair) {
@@ -635,19 +689,22 @@ export default function AiCoachScreen() {
           selectedMood?.label ?? '',
           aiText
         );
-        const repairedText = await generateGeminiText(repairPrompt);
+        const repairedText = await generateGeminiText(repairPrompt, {
+          maxOutputTokens: 1800,
+          temperature: 0.45,
+        });
         parsedAnalysis = parseAnalysis(repairedText);
       }
 
       if (!parsedAnalysis.feeling) {
         parsedAnalysis.feeling = 'Mixed';
       }
-      if (!parsedAnalysis.feedback) {
-        parsedAnalysis.feedback =
-          "Thank you for sharing this. I'm here with you, and it sounds like a lot is sitting on your mind right now. It's okay to take this moment one small step at a time. If it helps, choose one gentle action that supports you today, even if it's tiny.";
-      }
-      if (!parsedAnalysis.question) {
-        parsedAnalysis.question = 'What feels most important to you to hold gently today?';
+      parsedAnalysis.feedback = trimToCompleteSentence(
+        parsedAnalysis.feedback,
+        JOURNAL_FALLBACK_FEEDBACK
+      );
+      if (!isCompleteQuestion(parsedAnalysis.question)) {
+        parsedAnalysis.question = JOURNAL_FALLBACK_QUESTION;
       }
       parsedAnalysis.parsed = true;
 
@@ -671,8 +728,19 @@ export default function AiCoachScreen() {
     try {
       const recentEntries = journalEntries.slice(0, 5);
       const prompt = buildWeeklyPrompt(name, recentEntries);
-      const aiText = await generateGeminiText(prompt);
-      setWeeklyInsight(parseWeeklyInsight(aiText));
+      const aiText = await generateGeminiText(prompt, { maxOutputTokens: 1400 });
+      let parsedInsight = parseWeeklyInsight(aiText);
+
+      if (weeklyInsightNeedsRepair(parsedInsight)) {
+        const repairPrompt = buildWeeklyRepairPrompt(name, recentEntries, aiText);
+        const repairedText = await generateGeminiText(repairPrompt, {
+          maxOutputTokens: 1400,
+          temperature: 0.45,
+        });
+        parsedInsight = parseWeeklyInsight(repairedText);
+      }
+
+      setWeeklyInsight(completeWeeklyInsight(parsedInsight));
     } catch (err) {
       setInsightError((err as Error).message);
     } finally {
